@@ -29,10 +29,10 @@ export default function FridayPdfChatApp() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/documents`);
       const data = await res.json();
-      if (data.documents) {
+      if (data.documents && data.documents.length > 0) {
         setDocuments(data.documents);
-        // Auto-select the first document if none is selected
-        if (data.documents.length > 0 && !selectedDoc) {
+        // Force the first document to be selected if none is set
+        if (!selectedDoc) {
           setSelectedDoc(data.documents[0].id);
         }
       }
@@ -51,7 +51,6 @@ export default function FridayPdfChatApp() {
   }, [messages]);
 
   // 2. Upload new PDF to the mainframe
-  // 2. Upload new PDF to the mainframe
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
@@ -67,18 +66,20 @@ export default function FridayPdfChatApp() {
       });
 
       if (res.ok) {
-        const data = await res.json(); // Extract the response data
+        const data = await res.json();
         
-        // Instantly add the new document to the dropdown and set it as active
-        if (data.id && data.filename) {
-          const newDoc = { id: data.id, filename: data.filename, created_at: new Date().toISOString() };
+        // Failsafe: Grab the ID whether the backend calls it 'id' or 'document_id'
+        const newDocId = data.id || data.document_id;
+        
+        if (newDocId && data.filename) {
+          const newDoc = { id: newDocId, filename: data.filename, created_at: new Date().toISOString() };
           setDocuments(prev => [newDoc, ...prev]);
-          setSelectedDoc(data.id);
+          setSelectedDoc(newDocId); // Manually force selection
         } else {
-          await fetchDocuments(); // Fallback if no ID is returned
+          await fetchDocuments(); // Fallback to fetching the list
         }
 
-        setIsUploadMode(false); // Switch back to chat view
+        setIsUploadMode(false); 
         setFile(null);
         setMessages([{ role: "bot", text: `Protocol initialized. "${file.name}" has been processed and encrypted into the mainframe. Awaiting your query.` }]);
       } else {
@@ -91,11 +92,18 @@ export default function FridayPdfChatApp() {
       setLoading(false);
     }
   };
-  
 
   // 3. Send query to specific selected document
   const handleSendMessage = async () => {
-    if (!input.trim() || !selectedDoc || loading) return;
+    if (!input.trim() || loading) return;
+
+    // Failsafe: If React state lags, forcefully use the newest document in the array
+    const targetDocId = selectedDoc || (documents.length > 0 ? documents[0].id : null);
+
+    if (!targetDocId) {
+       setMessages(prev => [...prev, { role: "bot", text: "⚠️ Error: No document context found. Please upload a file first." }]);
+       return;
+    }
 
     const currentInput = input;
     const newMessages = [...messages, { role: "user" as const, text: currentInput }];
@@ -107,7 +115,7 @@ export default function FridayPdfChatApp() {
       const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ document_id: selectedDoc, message: currentInput }),
+        body: JSON.stringify({ document_id: targetDocId, message: currentInput }),
       });
 
       const data = await res.json();
@@ -123,7 +131,7 @@ export default function FridayPdfChatApp() {
   return (
     <div className="relative flex flex-col h-screen overflow-hidden bg-black text-cyan-400 font-mono selection:bg-cyan-900">
       
-      {/* BACKGROUND ARC REACTOR (Pure CSS) */}
+      {/* BACKGROUND ARC REACTOR */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-20 pointer-events-none flex items-center justify-center">
         <div className="w-[400px] h-[400px] rounded-full border border-cyan-800 shadow-[0_0_80px_rgba(34,211,238,0.2),inset_0_0_80px_rgba(34,211,238,0.2)] flex items-center justify-center animate-[spin_20s_linear_infinite]">
           <div className="w-[300px] h-[300px] rounded-full border-4 border-dashed border-cyan-500/50 shadow-[0_0_50px_#22d3ee,inset_0_0_50px_#22d3ee] flex items-center justify-center animate-pulse">
@@ -138,7 +146,7 @@ export default function FridayPdfChatApp() {
       {/* FOREGROUND CONTENT */}
       <div className="relative z-10 flex flex-col h-full max-w-4xl mx-auto w-full p-6">
         
-        {/* HEADER WITH DOCUMENT SELECTOR */}
+        {/* HEADER */}
         <header className="pb-4 mb-4 border-b border-cyan-900/50 flex justify-between items-end gap-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 uppercase">
@@ -148,14 +156,14 @@ export default function FridayPdfChatApp() {
             <div className="mt-4 flex items-center gap-3">
               <label className="text-xs text-cyan-700 uppercase tracking-widest">Active Context:</label>
               <select 
-                value={selectedDoc}
+                value={selectedDoc || (documents.length > 0 ? documents[0].id : "")}
                 onChange={(e) => {
                   setSelectedDoc(e.target.value);
-                  setMessages([]); // Clear chat when switching documents
+                  setMessages([]); 
                 }}
                 className="bg-cyan-950/40 border border-cyan-800 text-cyan-300 text-sm rounded px-3 py-1 outline-none focus:border-cyan-400 transition"
               >
-                {documents.length === 0 ? <option>No documents available</option> : null}
+                {documents.length === 0 ? <option value="">No documents available</option> : null}
                 {documents.map(doc => (
                   <option key={doc.id} value={doc.id}>{doc.filename}</option>
                 ))}
@@ -176,7 +184,7 @@ export default function FridayPdfChatApp() {
           </div>
         </header>
 
-        {/* STEP 1: UPLOAD SCREEN */}
+        {/* UPLOAD SCREEN */}
         {isUploadMode ? (
           <div className="flex-1 flex flex-col items-center justify-center backdrop-blur-sm bg-cyan-950/10 border border-cyan-900/50 rounded-lg p-8 shadow-[0_0_30px_rgba(8,145,178,0.1)]">
             <form onSubmit={handleUpload} className="text-center space-y-8">
@@ -214,19 +222,16 @@ export default function FridayPdfChatApp() {
             </form>
           </div>
         ) : (
-          /* STEP 2: ACTIVE CHAT INTERFACE */
+          /* CHAT INTERFACE */
           <div className="flex-1 flex flex-col justify-between overflow-hidden backdrop-blur-md bg-black/40 border border-cyan-900/50 rounded-lg shadow-[0_0_30px_rgba(8,145,178,0.15)]">
             
             {/* Messages Feed */}
             <div className="flex-1 overflow-y-auto space-y-6 p-6 scrollbar-thin scrollbar-thumb-cyan-900 scrollbar-track-transparent">
-              {messages.length === 0 && selectedDoc && (
+              {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-cyan-700/50">
-                  <p className="tracking-widest uppercase">Awaiting directive for selected document.</p>
-                </div>
-              )}
-              {messages.length === 0 && !selectedDoc && (
-                <div className="flex flex-col items-center justify-center h-full text-cyan-700/50">
-                  <p className="tracking-widest uppercase">Please select or upload a document to begin.</p>
+                  <p className="tracking-widest uppercase">
+                    {documents.length > 0 ? "Awaiting directive for selected document." : "Please upload a document to begin."}
+                  </p>
                 </div>
               )}
 
@@ -261,7 +266,7 @@ export default function FridayPdfChatApp() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Action Input Box */}
+            {/* ACTION INPUT BOX - Locks Removed */}
             <div className="p-4 border-t border-cyan-900/50 bg-black/60">
               <div className="flex gap-3">
                 <input
@@ -269,12 +274,12 @@ export default function FridayPdfChatApp() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                   className="flex-1 p-4 bg-cyan-950/20 border border-cyan-800/50 text-cyan-300 placeholder-cyan-800 focus:outline-none focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.3)] rounded transition-all disabled:opacity-50"
-                  placeholder={selectedDoc ? "Enter command directive..." : "Select a document first..."}
-                  disabled={loading || !selectedDoc}
+                  placeholder="Enter command directive..."
+                  disabled={loading} // STRICT LOCK REMOVED
                 />
                 <button
                   onClick={handleSendMessage}
-                  disabled={loading || !selectedDoc || !input.trim()}
+                  disabled={loading || !input.trim()} // STRICT LOCK REMOVED
                   className="px-8 bg-cyan-950 border border-cyan-700 hover:bg-cyan-900 hover:border-cyan-400 text-cyan-400 hover:text-cyan-100 uppercase tracking-widest text-sm font-bold rounded transition-all duration-300 shadow-[0_0_10px_rgba(8,145,178,0.2)] hover:shadow-[0_0_20px_rgba(34,211,238,0.6)] disabled:opacity-50 disabled:shadow-none"
                 >
                   Send
