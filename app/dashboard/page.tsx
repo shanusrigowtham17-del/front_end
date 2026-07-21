@@ -9,8 +9,8 @@ import { ResourceUploader } from '@/components/ResourceUploader';
 
 // Hardcoded for web demo setup
 const supabase = createClient(
-  'https://your-project-ref.supabase.co',
-  'your-anon-public-key'
+  'https://gftrjvljhtqkercsiskp.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
 );
 
 export default function Dashboard() {
