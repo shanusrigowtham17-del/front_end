@@ -64,12 +64,19 @@ export default function ChatbotPage() {
         .select('id, filename, created_at')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error("Error fetching documents:", error);
-      } else if (docs) {
-        setDocuments(docs);
-        if (docs.length > 0) setSelectedDoc(docs[0].id);
-      }
+      // Fetch uploaded documents via your Python backend
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/documents`);
+        if (!res.ok) throw new Error("Failed to fetch from backend");
+        const data = await res.json();
+        
+        if (data.documents) {
+          setDocuments(data.documents);
+          if (data.documents.length > 0) setSelectedDoc(data.documents[0].id);
+        }
+      } catch (err) {
+        console.error("Error fetching documents:", err);
+      
     }
 
     loadChatbotData();
