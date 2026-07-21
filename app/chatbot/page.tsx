@@ -51,6 +51,7 @@ export default function FridayPdfChatApp() {
   }, [messages]);
 
   // 2. Upload new PDF to the mainframe
+  // 2. Upload new PDF to the mainframe
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
@@ -66,7 +67,17 @@ export default function FridayPdfChatApp() {
       });
 
       if (res.ok) {
-        await fetchDocuments(); // Refresh the dropdown list
+        const data = await res.json(); // Extract the response data
+        
+        // Instantly add the new document to the dropdown and set it as active
+        if (data.id && data.filename) {
+          const newDoc = { id: data.id, filename: data.filename, created_at: new Date().toISOString() };
+          setDocuments(prev => [newDoc, ...prev]);
+          setSelectedDoc(data.id);
+        } else {
+          await fetchDocuments(); // Fallback if no ID is returned
+        }
+
         setIsUploadMode(false); // Switch back to chat view
         setFile(null);
         setMessages([{ role: "bot", text: `Protocol initialized. "${file.name}" has been processed and encrypted into the mainframe. Awaiting your query.` }]);
@@ -80,6 +91,7 @@ export default function FridayPdfChatApp() {
       setLoading(false);
     }
   };
+  
 
   // 3. Send query to specific selected document
   const handleSendMessage = async () => {
