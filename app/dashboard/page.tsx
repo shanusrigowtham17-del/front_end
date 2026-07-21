@@ -140,7 +140,7 @@ export default function Dashboard() {
         <section className="mt-12 mb-8">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6 uppercase tracking-wide">My Resources</h2>
           <div className="bg-white dark:bg-[#111C44] rounded-3xl p-8 shadow-sm border border-dashed border-indigo-300 dark:border-indigo-700/50 flex flex-col items-center justify-center text-center">
-             <ResourceUploader userId={user.id} />
+             <ResourceUploader />
           </div>
         </section>
       </main>
