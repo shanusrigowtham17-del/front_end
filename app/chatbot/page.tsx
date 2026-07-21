@@ -58,13 +58,7 @@ export default function ChatbotPage() {
 
       setUser(profileData);
 
-      // Fetch uploaded documents directly from Supabase table
-      const { data: docs, error } = await supabase
-        .from('documents')
-        .select('id, filename, created_at')
-        .order('created_at', { ascending: false });
-
-      // Fetch uploaded documents via your Python backend
+      // Fetch uploaded documents via your Python backend to bypass RLS
       try {
         const res = await fetch(`${BACKEND_URL}/api/documents`);
         if (!res.ok) throw new Error("Failed to fetch from backend");
@@ -76,7 +70,7 @@ export default function ChatbotPage() {
         }
       } catch (err) {
         console.error("Error fetching documents:", err);
-      
+      }
     }
 
     loadChatbotData();
