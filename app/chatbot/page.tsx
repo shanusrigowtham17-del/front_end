@@ -1,10 +1,18 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 import { Sidebar } from '@/components/Sidebar';
 import { MessageSquare, Loader2, Send, Bot, User } from 'lucide-react';
 
 const BACKEND_URL = 'https://pdf-course-api.onrender.com';
+
+// Initialize Supabase with your actual keys
+const supabase = createClient(
+  'https://gftrjvljhtqkercsiskp.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
+);
 
 interface Document {
   id: string;
@@ -18,6 +26,9 @@ interface ChatMessage {
 }
 
 export default function ChatbotPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string>('');
   
@@ -27,25 +38,53 @@ export default function ChatbotPage() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fallback demo user to pass to Sidebar
-  const demoUser = { full_name: 'Alex Johnson', level: 14, xp_points: 10750 };
-
-  // Fetch available documents on mount
+  // 1. Supabase Authentication & Document Fetching
   useEffect(() => {
-    async function fetchDocuments() {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/documents`);
-        const data = await res.json();
-        if (data.documents) {
-          setDocuments(data.documents);
-          if (data.documents.length > 0) setSelectedDoc(data.documents[0].id);
-        }
-      } catch (err) {
-        console.error("Failed to load documents", err);
+    async function loadChatbotData() {
+      // Check auth session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      // Fetch real user profile for the Sidebar
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      setUser(profileData);
+
+      // Fetch uploaded documents directly from Supabase table
+      const { data: docs, error } = await supabase
+        .from('documents')
+        .select('id, filename, created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error("Error fetching documents:", error);
+      } else if (docs) {
+        setDocuments(docs);
+        if (docs.length > 0) setSelectedDoc(docs[0].id);
       }
     }
-    fetchDocuments();
-  }, []);
+
+    loadChatbotData();
+
+    // Listen for sign-outs
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        router.push('/login');
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -70,14 +109,13 @@ export default function ChatbotPage() {
     setLoading(true);
 
     try {
-      // NOTE: Ensure your FastAPI backend has a corresponding /api/chat POST endpoint
+      // Send the question to your Python backend
       const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           document_id: selectedDoc, 
-          message: userMessage,
-          history: messages // Optional: pass history if your AI needs conversational memory
+          message: userMessage
         })
       });
       
@@ -85,7 +123,7 @@ export default function ChatbotPage() {
       
       const data = await res.json();
       
-      // Add AI response to UI
+      // Add AI response to UI (Check for 'reply', 'answer', or 'response' keys based on your python code)
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply || data.answer || data.response }]);
     } catch (err) {
       console.error(err);
@@ -95,9 +133,18 @@ export default function ChatbotPage() {
     }
   };
 
+  // Prevent rendering until user is loaded to avoid layout jumps
+  if (!user) return (
+    <div className="h-screen w-full bg-[#F4F7FE] dark:bg-[#0B1437] flex items-center justify-center font-bold text-slate-400">
+      Loading AI Chat...
+    </div>
+  );
+
   return (
     <div className="flex h-screen w-full bg-[#F4F7FE] dark:bg-[#0B1437] transition-colors duration-300">
-      <Sidebar user={demoUser} />
+      
+      {/* Sidebar now uses REAL authenticated user data */}
+      <Sidebar user={user} />
       
       <main className="flex-1 overflow-hidden p-8 font-sans flex flex-col h-screen">
         
