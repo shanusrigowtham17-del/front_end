@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { Sun, Moon, Flame, Clock, Zap, Trophy, Play } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
+import { ResourceUploader } from '@/components/ResourceUploader';
 
 // Initialize with your actual keys
 const supabase = createClient(
@@ -15,7 +16,7 @@ const supabase = createClient(
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark'); // Defaulted to dark to match image
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark'); 
   const [analytics, setAnalytics] = useState<any>(null);
   const [activeCourses, setActiveCourses] = useState<any[]>([]);
   const [greeting, setGreeting] = useState('Good morning');
@@ -100,7 +101,6 @@ export default function Dashboard() {
   return (
     <div className={`flex h-screen w-full bg-[#F4F7FE] dark:bg-[#0B1437] transition-colors duration-300 ${theme}`}>
       
-      {/* Sidebar matches the left panel of the image */}
       <Sidebar user={user} /> 
       
       <main className="flex-1 overflow-y-auto p-8 font-sans">
@@ -131,7 +131,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* TOP STAT CARDS */}
+        {/* TOP STAT CARDS (Colors Fixed) */}
         <div className="grid grid-cols-4 gap-6 mb-10">
           <AnalyticsCard 
             title="XP Earned Today" 
@@ -140,6 +140,7 @@ export default function Dashboard() {
             icon={<Zap className="w-5 h-5 text-indigo-400 fill-indigo-400" />} 
             bg="bg-[#1A2352]" 
             cardBg="bg-gradient-to-br from-[#1E2756] to-[#111C44]"
+            valueColor="text-indigo-400"
           />
           <AnalyticsCard 
             title="Study Streak" 
@@ -148,6 +149,7 @@ export default function Dashboard() {
             icon={<Flame className="w-5 h-5 text-orange-400 fill-orange-400" />} 
             bg="bg-[#2A2342]"
             cardBg="bg-gradient-to-br from-[#2D2447] to-[#111C44]"
+            valueColor="text-orange-400"
           />
           <AnalyticsCard 
             title="Global Rank" 
@@ -155,6 +157,7 @@ export default function Dashboard() {
             icon={<Trophy className="w-5 h-5 text-pink-400" />} 
             bg="bg-[#311C47]" 
             cardBg="bg-[#111C44]"
+            valueColor="text-pink-400"
           />
           <AnalyticsCard 
             title="Study Hours" 
@@ -163,6 +166,7 @@ export default function Dashboard() {
             icon={<Clock className="w-5 h-5 text-emerald-400" />} 
             bg="bg-[#162D44]" 
             cardBg="bg-[#111C44]"
+            valueColor="text-emerald-400"
           />
         </div>
 
@@ -198,7 +202,7 @@ export default function Dashboard() {
                 <h3 className="text-base font-extrabold text-white">Study Streak</h3>
                 <div className="bg-[#2A2342] px-3 py-1 rounded-full flex items-center gap-1.5">
                   <Flame className="w-3 h-3 text-orange-400 fill-orange-400" />
-                  <span className="text-xs font-bold text-orange-400">12</span>
+                  <span className="text-xs font-bold text-orange-400">{analytics.streak}</span>
                 </div>
               </div>
               
@@ -229,6 +233,14 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* RESTORED: MY RESOURCES SECTION */}
+        <section className="mt-12 mb-8">
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mb-6 tracking-tight">My Resources</h2>
+          <div className="bg-[#111C44] rounded-[28px] p-8 shadow-sm border border-dashed border-indigo-500/50 flex flex-col items-center justify-center text-center">
+             <ResourceUploader />
+          </div>
+        </section>
+
       </main>
     </div>
   );
@@ -236,7 +248,7 @@ export default function Dashboard() {
 
 // --- SUB-COMPONENTS ---
 
-function AnalyticsCard({ title, value, suffix, icon, bg, cardBg }: { title: string, value: string | number, suffix?: string, icon: React.ReactNode, bg: string, cardBg: string }) {
+function AnalyticsCard({ title, value, suffix, icon, bg, cardBg, valueColor = "text-white" }: { title: string, value: string | number, suffix?: string, icon: React.ReactNode, bg: string, cardBg: string, valueColor?: string }) {
   return (
     <div className={`${cardBg} p-6 rounded-[28px] shadow-sm border border-gray-800 flex flex-col justify-between h-[140px]`}>
       <div className="flex justify-between items-start">
@@ -246,7 +258,7 @@ function AnalyticsCard({ title, value, suffix, icon, bg, cardBg }: { title: stri
         </div>
       </div>
       <div className="flex items-baseline gap-1.5">
-        <h3 className="text-[32px] font-extrabold text-white tracking-tight leading-none">{value}</h3>
+        <h3 className={`text-[32px] font-extrabold tracking-tight leading-none ${valueColor}`}>{value}</h3>
         {suffix && <span className="text-lg font-bold text-gray-400">{suffix}</span>}
       </div>
     </div>
