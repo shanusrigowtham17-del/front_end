@@ -83,6 +83,18 @@ export default function StudyChatbot() {
       });
 
       if (res.ok) {
+        const data = await res.json();
+        // Capture the new file's id from the backend so chat requests
+        // are scoped to the document that was just uploaded.
+        const newFileId = data.file_id || data.id || null;
+        setSelectedFileId(newFileId);
+
+        // Reflect the new file in the "Select from Database" list right away,
+        // instead of waiting for a full page reload to see it.
+        if (newFileId) {
+          setDbFiles((prev) => [{ id: newFileId, file_name: file.name }, ...prev]);
+        }
+
         setIsUploaded(true);
         setMessages([{ role: "bot", text: `"${file.name}" has been processed and analyzed. What would you like to know about it?` }]);
       } else {
@@ -98,6 +110,7 @@ export default function StudyChatbot() {
 
   // 3. Select an EXISTING PDF
   const handleSelectDbFile = (fileId: string, fileName: string) => {
+    setFile(null);
     setSelectedFileId(fileId);
     setIsUploaded(true);
     setMessages([{ role: "bot", text: `You selected "${fileName}". How can I help you study this material?` }]);
@@ -146,69 +159,69 @@ export default function StudyChatbot() {
     <div className="flex h-screen w-full bg-[#0B1437] font-sans overflow-hidden text-gray-200">
       
       {/* ================= SIDEBAR ================= */}
-      <aside className="w-[280px] h-full bg-[#0B1437] border-r border-gray-800 flex flex-col justify-between py-8 shrink-0">
+      <aside className="w-[72px] md:w-[220px] xl:w-[280px] h-full bg-[#0B1437] border-r border-gray-800 flex flex-col justify-between py-8 shrink-0 transition-[width] duration-200">
         <div>
-          <div className="px-8 mb-12 flex items-center gap-3">
+          <div className="px-4 md:px-6 xl:px-8 mb-12 flex items-center gap-3">
             <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0">
               <Zap className="w-6 h-6 text-yellow-300 fill-yellow-300" />
             </div>
-            <div>
-              <h2 className="text-[22px] font-extrabold text-white tracking-tight leading-tight">StudySpark</h2>
-              <p className="text-[10px] font-black text-gray-400 tracking-[0.15em] uppercase">Edu Platform</p>
+            <div className="hidden md:block overflow-hidden">
+              <h2 className="text-[22px] font-extrabold text-white tracking-tight leading-tight truncate">StudySpark</h2>
+              <p className="text-[10px] font-black text-gray-400 tracking-[0.15em] uppercase truncate">Edu Platform</p>
             </div>
           </div>
 
-          <div className="px-4 space-y-2">
-            <p className="px-4 text-[11px] font-black text-gray-500 tracking-[0.1em] uppercase mb-4">Main Menu</p>
+          <div className="px-2 md:px-3 xl:px-4 space-y-2">
+            <p className="hidden md:block px-4 text-[11px] font-black text-gray-500 tracking-[0.1em] uppercase mb-4">Main Menu</p>
             
             <Link href="/" className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-gray-400 hover:text-white hover:bg-[#111C44] transition-all group">
-              <LayoutDashboard className="w-5 h-5 group-hover:text-indigo-400 transition-colors" />
-              <span className="font-bold">Dashboard</span>
+              <LayoutDashboard className="w-5 h-5 shrink-0 group-hover:text-indigo-400 transition-colors" />
+              <span className="hidden md:inline font-bold truncate">Dashboard</span>
             </Link>
             
             <div className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-indigo-400 bg-[#1A2556] relative cursor-pointer shadow-lg shadow-indigo-900/20 border border-indigo-500/20">
-              <MessageSquare className="w-5 h-5" />
-              <span className="font-bold text-white">AI Chatbot</span>
+              <MessageSquare className="w-5 h-5 shrink-0" />
+              <span className="hidden md:inline font-bold text-white truncate">AI Chatbot</span>
               <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-indigo-500 rounded-l-full shadow-[0_0_10px_rgba(99,102,241,0.5)]"></div>
             </div>
 
             <Link href="/quiz" className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-gray-400 hover:text-white hover:bg-[#111C44] transition-all group">
-              <HelpCircle className="w-5 h-5 group-hover:text-indigo-400 transition-colors" />
-              <span className="font-bold">AI Quiz</span>
+              <HelpCircle className="w-5 h-5 shrink-0 group-hover:text-indigo-400 transition-colors" />
+              <span className="hidden md:inline font-bold truncate">AI Quiz</span>
             </Link>
 
             <Link href="/schedule" className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-gray-400 hover:text-white hover:bg-[#111C44] transition-all group">
-              <Calendar className="w-5 h-5 group-hover:text-indigo-400 transition-colors" />
-              <span className="font-bold">Schedule</span>
+              <Calendar className="w-5 h-5 shrink-0 group-hover:text-indigo-400 transition-colors" />
+              <span className="hidden md:inline font-bold truncate">Schedule</span>
             </Link>
           </div>
         </div>
 
         {user && (
-          <div className="px-5 mt-auto">
-            <div className="bg-[#111C44] rounded-[24px] p-5 shadow-sm border border-gray-800">
+          <div className="px-2 md:px-3 xl:px-5 mt-auto">
+            <div className="bg-[#111C44] rounded-[24px] p-3 md:p-5 shadow-sm border border-gray-800">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold text-sm shrink-0 uppercase">
                   {getInitials(user.full_name)}
                 </div>
-                <div className="overflow-hidden">
+                <div className="hidden md:block overflow-hidden">
                   <p className="text-[13px] font-extrabold text-white truncate">{user.full_name || 'Student'}</p>
                   <p className="text-[11px] font-medium text-gray-400 truncate">
                     {user.title || user.email || 'Dynamic Learner'}
                   </p>
                 </div>
               </div>
-              <div className="flex justify-between items-center text-[10px] font-bold mb-2">
+              <div className="hidden md:flex justify-between items-center text-[10px] font-bold mb-2">
                 <span className="text-indigo-400">Lv. {user.level || 1} Scholar</span>
                 <span className="text-gray-400">{user.xp_points || 0} XP</span>
               </div>
-              <div className="w-full h-1.5 bg-[#1A2556] rounded-full overflow-hidden">
+              <div className="hidden md:block w-full h-1.5 bg-[#1A2556] rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-indigo-500 rounded-full" 
                   style={{ width: `${Math.min(100, ((user.xp_points || 0) % 1000) / 10)}%` }}
                 />
               </div>
-              <p className="text-[9px] font-bold text-gray-500 text-right mt-1.5 uppercase">
+              <p className="hidden md:block text-[9px] font-bold text-gray-500 text-right mt-1.5 uppercase">
                 1000 to Lv. {(user.level || 1) + 1}
               </p>
             </div>
@@ -217,7 +230,7 @@ export default function StudyChatbot() {
       </aside>
 
       {/* ================= MAIN CONTENT ================= */}
-      <div className="flex-1 flex flex-col h-full bg-[#0B1437]">
+      <div className="flex-1 flex flex-col h-full bg-[#0B1437] min-w-0">
         
         {/* HEADER */}
         <header className="h-20 border-b border-gray-800 flex items-center justify-between px-10 shrink-0 bg-[#0B1437]">
@@ -327,6 +340,7 @@ export default function StudyChatbot() {
                     setIsUploaded(false);
                     setMessages([]);
                     setFile(null);
+                    setSelectedFileId(null);
                   }}
                   className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
                 >
