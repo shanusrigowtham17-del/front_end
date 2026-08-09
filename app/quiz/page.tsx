@@ -1,37 +1,51 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { BrainCircuit, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
-const BACKEND_URL = 'https://back-end-45gs.onrender.com';
+// Supabase client (using your demo keys)
+const supabase = createClient(
+  'https://gftrjvljhtqkercsiskp.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
+);
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://back-end-45gs.onrender.com';
 
 interface Document {
-  id: string;
-  filename: string;
-  created_at: string;
+  id: string;
+  filename: string;
+  created_at: string;
 }
 
 interface QuizQuestion {
-  question: string;
-  options: string[];
-  correct_answer_index: number;
+  question: string;
+  options: string[];
+  correct_answer_index: number;
 }
 
 export default function QuizPage() {
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [selectedDoc, setSelectedDoc] = useState<string>('');
-  const [numQuestions, setNumQuestions] = useState<number>(5);
-  
-  const [quiz, setQuiz] = useState<QuizQuestion[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  
-  const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [score, setScore] = useState(0);
+  const [user, setUser] = useState<any>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [selectedDoc, setSelectedDoc] = useState<string>('');
+  const [numQuestions, setNumQuestions] = useState<number>(5);
+  
+  const [quiz, setQuiz] = useState<QuizQuestion[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  
+  const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [score, setScore] = useState(0);
 
-  // Fallback demo user to pass to Sidebar
-  const loadInitialData = useCallback(async () => {
+  // Force dark mode on component mount
+  useEffect(() => {
+    document.documentElement.classList.add('dark');
+  }, []);
+
+  // Fetch real user and their resources from Supabase
+  const loadInitialData = useCallback(async () => {
     setPageLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     
@@ -48,185 +62,200 @@ export default function QuizPage() {
       setUser({ ...profileData, email: session.user.email });
     }
 
-  useEffect(() => {
-    async function fetchDocuments() {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/documents`);
-        const data = await res.json();
-        if (data.documents) {
-          setDocuments(data.documents);
-          if (data.documents.length > 0) setSelectedDoc(data.documents[0].id);
-        }
-      } catch (err) {
-        console.error("Failed to load documents", err);
-      }
-    }
-    fetchDocuments();
-  }, []);
+    // 2. Fetch all uploaded resources for the dropdown (from Supabase, not Render)
+    const { data: resourceData } = await supabase
+      .from('resources')
+      .select('id, file_name, created_at')
+      .order('created_at', { ascending: false });
 
-  const generateQuiz = async () => {
-    if (!selectedDoc) return;
-    setLoading(true);
-    setQuiz(null);
-    setIsSubmitted(false);
-    setUserAnswers({});
-    
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/quiz`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_id: selectedDoc, num_questions: numQuestions })
-      });
-      
-      if (!res.ok) throw new Error('Failed to generate quiz');
-      
-      const data = await res.json();
-      setQuiz(data.quiz);
-    } catch (err) {
-      console.error(err);
-      alert('Error generating quiz.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (resourceData) {
+      // Map Supabase 'file_name' to the expected 'filename' format
+      const formattedDocs = resourceData.map(r => ({
+        id: r.id,
+        filename: r.file_name,
+        created_at: r.created_at
+      }));
+      setDocuments(formattedDocs);
+      if (formattedDocs.length > 0) setSelectedDoc(formattedDocs[0].id);
+    }
+    
+    setPageLoading(false);
+  }, []);
 
-  const handleSelectAnswer = (qIndex: number, optIndex: number) => {
-    if (isSubmitted) return;
-    setUserAnswers(prev => ({ ...prev, [qIndex]: optIndex }));
-  };
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
 
-  const submitQuiz = () => {
-    if (!quiz) return;
-    let currentScore = 0;
-    quiz.forEach((q, idx) => {
-      if (userAnswers[idx] === q.correct_answer_index) {
-        currentScore++;
-      }
-    });
-    setScore(currentScore);
-    setIsSubmitted(true);
-  };
+  const generateQuiz = async () => {
+    if (!selectedDoc) return;
+    setLoading(true);
+    setQuiz(null);
+    setIsSubmitted(false);
+    setUserAnswers({});
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/quiz`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_id: selectedDoc, num_questions: numQuestions })
+      });
+      
+      if (!res.ok) throw new Error('Failed to generate quiz');
+      
+      const data = await res.json();
+      setQuiz(data.quiz);
+    } catch (err) {
+      console.error(err);
+      alert('Error generating quiz.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  return (
-    <div className="flex h-screen w-full bg-[#F4F7FE] dark:bg-[#0B1437] transition-colors duration-300">
-      <Sidebar user={demoUser} />
-      
-      <main className="flex-1 overflow-y-auto p-8 font-sans">
-        <header className="mb-10">
-          <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white flex items-center gap-3">
-            <BrainCircuit className="w-10 h-10 text-pink-500" /> AI Quiz Generator
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-            Test your knowledge instantly using your uploaded study materials.
-          </p>
-        </header>
+  const handleSelectAnswer = (qIndex: number, optIndex: number) => {
+    if (isSubmitted) return;
+    setUserAnswers(prev => ({ ...prev, [qIndex]: optIndex }));
+  };
 
-        {/* Configuration Card */}
-        <div className="bg-white dark:bg-[#111C44] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 mb-8 flex gap-6 items-end">
-          <div className="flex-1">
-            <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Select Study Material</label>
-            <select 
-              value={selectedDoc}
-              onChange={(e) => setSelectedDoc(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200"
-            >
-              {documents.length === 0 ? <option>No documents uploaded yet</option> : null}
-              {documents.map(doc => (
-                <option key={doc.id} value={doc.id}>{doc.filename}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="w-32">
-            <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Questions</label>
-            <input 
-              type="number" 
-              min="1" max="20"
-              value={numQuestions}
-              onChange={(e) => setNumQuestions(parseInt(e.target.value) || 5)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200"
-            />
-          </div>
+  const submitQuiz = () => {
+    if (!quiz) return;
+    let currentScore = 0;
+    quiz.forEach((q, idx) => {
+      if (userAnswers[idx] === q.correct_answer_index) {
+        currentScore++;
+      }
+    });
+    setScore(currentScore);
+    setIsSubmitted(true);
+  };
 
-          <button 
-            onClick={generateQuiz}
-            disabled={loading || !selectedDoc}
-            className="bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-pink-500/30 flex items-center gap-2"
-          >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Generate Now'}
-          </button>
-        </div>
+  if (pageLoading) {
+    return (
+      <div className="h-screen w-full bg-[#0B1437] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+      </div>
+    );
+  }
 
-        {/* Active Quiz Area */}
-        {quiz && (
-          <div className="space-y-6 max-w-4xl">
-            {quiz.map((q, qIdx) => (
-              <div key={qIdx} className="bg-white dark:bg-[#111C44] p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
-                  <span className="text-pink-500 mr-2">{qIdx + 1}.</span>
-                  {q.question}
-                </h3>
-                
-                <div className="space-y-3">
-                  {q.options.map((opt, oIdx) => {
-                    const isSelected = userAnswers[qIdx] === oIdx;
-                    const isCorrect = q.correct_answer_index === oIdx;
-                    
-                    let bgClass = "bg-[#F4F7FE] dark:bg-[#0B1437] hover:bg-gray-100 dark:hover:bg-[#1A2A6C]";
-                    let borderClass = "border-transparent";
+  return (
+    <div className="flex h-screen w-full bg-[#F4F7FE] dark:bg-[#0B1437] transition-colors duration-300">
+      <Sidebar user={user} />
+      
+      <main className="flex-1 overflow-y-auto p-8 font-sans">
+        <header className="mb-10">
+          <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white flex items-center gap-3">
+            <BrainCircuit className="w-10 h-10 text-pink-500" /> AI Quiz Generator
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            Test your knowledge instantly using your uploaded study materials.
+          </p>
+        </header>
 
-                    if (isSelected) {
-                      bgClass = "bg-indigo-50 dark:bg-indigo-900/30";
-                      borderClass = "border-indigo-500";
-                    }
+        {/* Configuration Card */}
+        <div className="bg-white dark:bg-[#111C44] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 mb-8 flex gap-6 items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Select Study Material</label>
+            <select 
+              value={selectedDoc}
+              onChange={(e) => setSelectedDoc(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 transition-colors"
+            >
+              {documents.length === 0 ? <option>No documents uploaded yet</option> : null}
+              {documents.map(doc => (
+                <option key={doc.id} value={doc.id}>{doc.filename}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="w-32">
+            <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Questions</label>
+            <input 
+              type="number" 
+              min="1" max="20"
+              value={numQuestions}
+              onChange={(e) => setNumQuestions(parseInt(e.target.value) || 5)}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
 
-                    if (isSubmitted) {
-                      if (isCorrect) {
-                        bgClass = "bg-emerald-50 dark:bg-emerald-900/30";
-                        borderClass = "border-emerald-500";
-                      } else if (isSelected && !isCorrect) {
-                        bgClass = "bg-red-50 dark:bg-red-900/30";
-                        borderClass = "border-red-500";
-                      }
-                    }
+          <button 
+            onClick={generateQuiz}
+            disabled={loading || !selectedDoc}
+            className="bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-pink-500/30 flex items-center gap-2 min-w-[160px] justify-center"
+          >
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Generate Now'}
+          </button>
+        </div>
 
-                    return (
-                      <button
-                        key={oIdx}
-                        onClick={() => handleSelectAnswer(qIdx, oIdx)}
-                        className={`w-full text-left px-6 py-4 rounded-xl border-2 transition-all flex justify-between items-center ${bgClass} ${borderClass}`}
-                      >
-                        <span className="text-slate-700 dark:text-gray-200 font-medium">{opt}</span>
-                        {isSubmitted && isCorrect && <CheckCircle2 className="text-emerald-500 w-5 h-5" />}
-                        {isSubmitted && isSelected && !isCorrect && <XCircle className="text-red-500 w-5 h-5" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+        {/* Active Quiz Area */}
+        {quiz && (
+          <div className="space-y-6 max-w-4xl">
+            {quiz.map((q, qIdx) => (
+              <div key={qIdx} className="bg-white dark:bg-[#111C44] p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
+                  <span className="text-pink-500 mr-2">{qIdx + 1}.</span>
+                  {q.question}
+                </h3>
+                
+                <div className="space-y-3">
+                  {q.options.map((opt, oIdx) => {
+                    const isSelected = userAnswers[qIdx] === oIdx;
+                    const isCorrect = q.correct_answer_index === oIdx;
+                    
+                    let bgClass = "bg-[#F4F7FE] dark:bg-[#0B1437] hover:bg-gray-100 dark:hover:bg-[#1A2A6C]";
+                    let borderClass = "border-transparent";
 
-            {/* Submit / Results Footer */}
-            <div className="bg-white dark:bg-[#111C44] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              {isSubmitted ? (
-                <div className="text-2xl font-black text-slate-900 dark:text-white">
-                  Score: <span className={score === quiz.length ? "text-emerald-500" : "text-indigo-500"}>{score} / {quiz.length}</span>
-                </div>
-              ) : (
-                <p className="text-gray-500 font-medium">Review your answers before submitting.</p>
-              )}
-              
-              <button 
-                onClick={isSubmitted ? generateQuiz : submitQuiz}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-indigo-500/30"
-              >
-                {isSubmitted ? 'Generate Another Quiz' : 'Submit Answers'}
-              </button>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
-  );
+                    if (isSelected) {
+                      bgClass = "bg-indigo-50 dark:bg-indigo-900/30";
+                      borderClass = "border-indigo-500";
+                    }
+
+                    if (isSubmitted) {
+                      if (isCorrect) {
+                        bgClass = "bg-emerald-50 dark:bg-emerald-900/30";
+                        borderClass = "border-emerald-500";
+                      } else if (isSelected && !isCorrect) {
+                        bgClass = "bg-red-50 dark:bg-red-900/30";
+                        borderClass = "border-red-500";
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={oIdx}
+                        onClick={() => handleSelectAnswer(qIdx, oIdx)}
+                        className={`w-full text-left px-6 py-4 rounded-xl border-2 transition-all flex justify-between items-center ${bgClass} ${borderClass}`}
+                      >
+                        <span className="text-slate-700 dark:text-gray-200 font-medium">{opt}</span>
+                        {isSubmitted && isCorrect && <CheckCircle2 className="text-emerald-500 w-5 h-5" />}
+                        {isSubmitted && isSelected && !isCorrect && <XCircle className="text-red-500 w-5 h-5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {/* Submit / Results Footer */}
+            <div className="bg-white dark:bg-[#111C44] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              {isSubmitted ? (
+                <div className="text-2xl font-black text-slate-900 dark:text-white">
+                  Score: <span className={score === quiz.length ? "text-emerald-500" : "text-indigo-500"}>{score} / {quiz.length}</span>
+                </div>
+              ) : (
+                <p className="text-gray-500 font-medium">Review your answers before submitting.</p>
+              )}
+              
+              <button 
+                onClick={isSubmitted ? generateQuiz : submitQuiz}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-indigo-500/30"
+              >
+                {isSubmitted ? 'Generate Another Quiz' : 'Submit Answers'}
+              </button>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
 }
-
