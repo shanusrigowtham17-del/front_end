@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Sidebar } from '@/components/Sidebar';
-import { BrainCircuit, Loader2, CheckCircle2, XCircle } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { BrainCircuit, Loader2, CheckCircle2, XCircle, ChevronDown } from 'lucide-react';
+import { createClient } from "@supabase/supabase-js";
 
 // Supabase client (using your demo keys)
 const supabase = createClient(
@@ -44,7 +44,7 @@ export default function QuizPage() {
     document.documentElement.classList.add('dark');
   }, []);
 
-  // Fetch real user and their resources from Supabase
+  // Fetch real user and their documents from Supabase
   const loadInitialData = useCallback(async () => {
     setPageLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -62,21 +62,17 @@ export default function QuizPage() {
       setUser({ ...profileData, email: session.user.email });
     }
 
-    // 2. Fetch all uploaded resources for the dropdown (from Supabase, not Render)
-    const { data: resourceData } = await supabase
-      .from('resources')
-      .select('id, file_name, created_at')
+    // 2. Fetch all uploaded documents for the dropdown (Targeting 'documents' table instead of 'resources')
+    const { data: docData, error } = await supabase
+      .from('documents')
+      .select('id, filename, created_at')
       .order('created_at', { ascending: false });
 
-    if (resourceData) {
-      // Map Supabase 'file_name' to the expected 'filename' format
-      const formattedDocs = resourceData.map(r => ({
-        id: r.id,
-        filename: r.file_name,
-        created_at: r.created_at
-      }));
-      setDocuments(formattedDocs);
-      if (formattedDocs.length > 0) setSelectedDoc(formattedDocs[0].id);
+    if (error) {
+      console.error("Error fetching documents:", error);
+    } else if (docData) {
+      setDocuments(docData);
+      if (docData.length > 0) setSelectedDoc(docData[0].id);
     }
     
     setPageLoading(false);
@@ -153,18 +149,24 @@ export default function QuizPage() {
 
         {/* Configuration Card */}
         <div className="bg-white dark:bg-[#111C44] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 mb-8 flex gap-6 items-end">
+          
           <div className="flex-1">
             <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Select Study Material</label>
-            <select 
-              value={selectedDoc}
-              onChange={(e) => setSelectedDoc(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 transition-colors"
-            >
-              {documents.length === 0 ? <option>No documents uploaded yet</option> : null}
-              {documents.map(doc => (
-                <option key={doc.id} value={doc.id}>{doc.filename}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select 
+                value={selectedDoc}
+                onChange={(e) => setSelectedDoc(e.target.value)}
+                className="w-full px-4 py-3 pr-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 transition-colors appearance-none"
+              >
+                {documents.length === 0 ? <option>No documents uploaded yet</option> : null}
+                {documents.map(doc => (
+                  <option key={doc.id} value={doc.id}>{doc.filename}</option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </div>
+            </div>
           </div>
           
           <div className="w-32">
