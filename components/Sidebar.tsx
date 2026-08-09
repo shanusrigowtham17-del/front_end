@@ -16,7 +16,6 @@ export function Sidebar({ user }: SidebarProps) {
 
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-    { name: 'My Courses', icon: GraduationCap, path: '/courses' },
     { name: 'AI Chatbot', icon: MessageSquareCode, path: '/chatbot' },
     { name: 'AI Quiz', icon: HelpCircle, path: '/quiz' },
     { name: 'Schedule', icon: Calendar, path: '/schedule' },
