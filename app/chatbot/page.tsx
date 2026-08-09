@@ -29,28 +29,29 @@ export default function StudyChatbot() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch existing files from the user's resources table on mount
+ // 1. Fetch existing files from the resources table on mount
   useEffect(() => {
     const fetchExistingFiles = async () => {
       setFetchingDocs(true);
-      const { data: { session } } = await supabase.auth.getSession();
       
-      if (session) {
-        const { data, error } = await supabase
-          .from('resources')
-          .select('id, file_name')
-          .eq('user_id', session.user.id)
-          .order('created_at', { ascending: false });
+      // Temporarily fetching ALL resources to test the database connection
+      const { data, error } = await supabase
+        .from('resources')
+        .select('id, file_name')
+        .order('created_at', { ascending: false });
 
-        if (!error && data) {
-          setDbFiles(data);
-        }
+      if (error) {
+        console.error("Supabase error fetching resources:", error.message);
+      } else if (data) {
+        console.log("Successfully fetched files:", data);
+        setDbFiles(data);
       }
+      
       setFetchingDocs(false);
     };
 
     fetchExistingFiles();
   }, []);
-
   // 1A. Upload a NEW PDF to the backend
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
