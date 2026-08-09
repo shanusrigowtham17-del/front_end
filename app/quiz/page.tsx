@@ -31,7 +31,22 @@ export default function QuizPage() {
   const [score, setScore] = useState(0);
 
   // Fallback demo user to pass to Sidebar
-  const demoUser = { full_name: 'Alex Johnson', level: 14, xp_points: 10750 };
+  const loadInitialData = useCallback(async () => {
+    setPageLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session) {
+      const activeUserId = session.user.id;
+
+      // 1. Fetch Profile Data for Sidebar
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', activeUserId)
+        .single();
+        
+      setUser({ ...profileData, email: session.user.email });
+    }
 
   useEffect(() => {
     async function fetchDocuments() {
@@ -214,4 +229,4 @@ export default function QuizPage() {
     </div>
   );
 }
-fix this
+
