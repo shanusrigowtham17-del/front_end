@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronLeft, ChevronRight, Menu, Calendar as CalendarIcon, Loader2, X, Clock, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, X, Clock, Trash2 } from 'lucide-react';
 
 // Hardcoded for demo purposes
 const supabase = createClient(
@@ -149,19 +150,17 @@ export default function SchedulerFullPage() {
   return (
     <div className="flex flex-col h-screen w-full bg-[#0B1437] font-sans overflow-hidden text-gray-200 relative">
       
-      {/* HEADER (Toolbar Removed) */}
+      {/* HEADER */}
       <header className="h-16 border-b border-gray-800 flex items-center justify-between px-4 shrink-0 bg-[#0B1437]">
         <div className="flex items-center gap-4">
-          <button className="p-2 hover:bg-[#111C44] rounded-full transition-colors">
-            <Menu className="w-5 h-5 text-gray-400" />
-          </button>
           
-          <div className="flex items-center gap-2 mr-6">
-            <div className="p-1.5 bg-indigo-500 rounded-lg">
+          {/* Menu button removed, Study Calendar title made clickable */}
+          <Link href="/" className="flex items-center gap-2 mr-6 group cursor-pointer">
+            <div className="p-1.5 bg-indigo-500 rounded-lg group-hover:bg-indigo-400 transition-colors">
               <CalendarIcon className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-xl font-medium text-white tracking-tight">Study Calendar</h1>
-          </div>
+            <h1 className="text-xl font-medium text-white tracking-tight group-hover:text-indigo-200 transition-colors">Study Calendar</h1>
+          </Link>
 
           <button 
             onClick={goToToday}
@@ -184,7 +183,6 @@ export default function SchedulerFullPage() {
           </h2>
         </div>
         
-        {/* Right side options removed completely as requested */}
         <div></div>
       </header>
 
