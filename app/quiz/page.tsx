@@ -44,7 +44,7 @@ export default function QuizPage() {
     document.documentElement.classList.add('dark');
   }, []);
 
-  // Fetch real user and their documents from Supabase
+  // Fetch real user and their resources from Supabase
   const loadInitialData = useCallback(async () => {
     setPageLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -62,17 +62,23 @@ export default function QuizPage() {
       setUser({ ...profileData, email: session.user.email });
     }
 
-    // 2. Fetch all uploaded documents for the dropdown (Targeting 'documents' table instead of 'resources')
-    const { data: docData, error } = await supabase
-      .from('documents')
-      .select('id, filename, created_at')
+    // 2. Fetch all uploaded documents from the 'resources' table
+    const { data: resourceData, error } = await supabase
+      .from('resources')
+      .select('id, file_name, created_at')
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error("Error fetching documents:", error);
-    } else if (docData) {
-      setDocuments(docData);
-      if (docData.length > 0) setSelectedDoc(docData[0].id);
+      console.error("Error fetching resources:", error);
+    } else if (resourceData) {
+      // Map 'file_name' to 'filename' for the dropdown UI
+      const formattedDocs = resourceData.map(r => ({
+        id: r.id,
+        filename: r.file_name,
+        created_at: r.created_at
+      }));
+      setDocuments(formattedDocs);
+      if (formattedDocs.length > 0) setSelectedDoc(formattedDocs[0].id);
     }
     
     setPageLoading(false);
