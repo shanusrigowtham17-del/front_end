@@ -11,7 +11,8 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
 );
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://back-end-45gs.onrender.com';
+// FIX 1: Updated to match your working Chatbot backend URL
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://pdf-course-api.onrender.com';
 
 interface Document {
   id: string;
@@ -44,7 +45,7 @@ export default function QuizPage() {
     document.documentElement.classList.add('dark');
   }, []);
 
-  // Fetch real user and their resources from Supabase
+  // Fetch real user and their documents from Supabase
   const loadInitialData = useCallback(async () => {
     setPageLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -71,10 +72,10 @@ export default function QuizPage() {
     if (error) {
       console.error("Error fetching resources:", error);
     } else if (resourceData) {
-      // Map 'file_name' to 'filename' for the dropdown UI
+      // Map 'file_name' to 'filename' for the UI
       const formattedDocs = resourceData.map(r => ({
         id: r.id,
-        filename: r.file_name,
+        filename: r.file_name, 
         created_at: r.created_at
       }));
       setDocuments(formattedDocs);
@@ -99,16 +100,27 @@ export default function QuizPage() {
       const res = await fetch(`${BACKEND_URL}/api/quiz`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_id: selectedDoc, num_questions: numQuestions })
+        // FIX 2: Sending file_id to match what the chatbot backend expects
+        body: JSON.stringify({ file_id: selectedDoc, num_questions: numQuestions })
       });
       
-      if (!res.ok) throw new Error('Failed to generate quiz');
+      if (!res.ok) {
+        // If the server returns a 500 or 400 error, grab the text so we can see why
+        const errorText = await res.text();
+        throw new Error(`Server responded with ${res.status}: ${errorText}`);
+      }
       
       const data = await res.json();
+      
+      if (!data.quiz) {
+        throw new Error("Backend did not return a 'quiz' array in the response.");
+      }
+
       setQuiz(data.quiz);
-    } catch (err) {
-      console.error(err);
-      alert('Error generating quiz.');
+    } catch (err: any) {
+      console.error("Full quiz generation error:", err);
+      // Better error alerting so you know exactly what failed
+      alert(`Error generating quiz: ${err.message}`);
     } finally {
       setLoading(false);
     }
