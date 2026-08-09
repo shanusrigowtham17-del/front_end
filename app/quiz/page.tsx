@@ -5,14 +5,14 @@ import { Sidebar } from '@/components/Sidebar';
 import { BrainCircuit, Loader2, CheckCircle2, XCircle, ChevronDown } from 'lucide-react';
 import { createClient } from "@supabase/supabase-js";
 
-// Supabase client (using your demo keys)
+// Supabase client
 const supabase = createClient(
   'https://gftrjvljhtqkercsiskp.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
 );
 
-// FIX 1: Updated to match your working Chatbot backend URL
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://pdf-course-api.onrender.com';
+// RESTORED: Pointing specifically to your Quiz backend server
+const BACKEND_URL = process.env.NEXT_PUBLIC_QUIZ_BACKEND_URL || 'https://back-end-45gs.onrender.com';
 
 interface Document {
   id: string;
@@ -100,12 +100,11 @@ export default function QuizPage() {
       const res = await fetch(`${BACKEND_URL}/api/quiz`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // FIX 2: Sending file_id to match what the chatbot backend expects
-        body: JSON.stringify({ file_id: selectedDoc, num_questions: numQuestions })
+        // RESTORED: Sending 'document_id' instead of 'file_id' for this specific backend
+        body: JSON.stringify({ document_id: selectedDoc, num_questions: numQuestions })
       });
       
       if (!res.ok) {
-        // If the server returns a 500 or 400 error, grab the text so we can see why
         const errorText = await res.text();
         throw new Error(`Server responded with ${res.status}: ${errorText}`);
       }
@@ -119,7 +118,6 @@ export default function QuizPage() {
       setQuiz(data.quiz);
     } catch (err: any) {
       console.error("Full quiz generation error:", err);
-      // Better error alerting so you know exactly what failed
       alert(`Error generating quiz: ${err.message}`);
     } finally {
       setLoading(false);
