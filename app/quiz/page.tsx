@@ -1,10 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { BrainCircuit, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { createClient } from "@supabase/supabase-js";
 
-const BACKEND_URL = 'https://back-end-45gs.onrender.com';
+// Supabase client (using your demo keys)
+const supabase = createClient(
+  'https://gftrjvljhtqkercsiskp.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
+);
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://back-end-45gs.onrender.com';
 
 interface Document {
   id: string;
@@ -19,35 +26,60 @@ interface QuizQuestion {
 }
 
 export default function QuizPage() {
+  const [user, setUser] = useState<any>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string>('');
   const [numQuestions, setNumQuestions] = useState<number>(5);
   
   const [quiz, setQuiz] = useState<QuizQuestion[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
 
-  // Fallback demo user to pass to Sidebar
-  const demoUser = { full_name: 'Alex Johnson', level: 14, xp_points: 10750 };
+  // Fetch real user and their resources from Supabase
+  const loadInitialData = useCallback(async () => {
+    setPageLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session) {
+      const activeUserId = session.user.id;
+
+      // 1. Fetch Profile Data for Sidebar
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', activeUserId)
+        .single();
+        
+      setUser({ ...profileData, email: session.user.email });
+    }
+
+    // 2. Fetch all uploaded resources for the dropdown
+    const { data: resourceData } = await supabase
+      .from('resources')
+      .select('id, file_name, created_at')
+      .order('created_at', { ascending: false });
+
+    if (resourceData) {
+      // Map Supabase 'file_name' to the expected 'filename' format
+      const formattedDocs = resourceData.map(r => ({
+        id: r.id,
+        filename: r.file_name,
+        created_at: r.created_at
+      }));
+      setDocuments(formattedDocs);
+      if (formattedDocs.length > 0) setSelectedDoc(formattedDocs[0].id);
+    }
+    
+    setPageLoading(false);
+  }, []);
 
   useEffect(() => {
-    async function fetchDocuments() {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/documents`);
-        const data = await res.json();
-        if (data.documents) {
-          setDocuments(data.documents);
-          if (data.documents.length > 0) setSelectedDoc(data.documents[0].id);
-        }
-      } catch (err) {
-        console.error("Failed to load documents", err);
-      }
-    }
-    fetchDocuments();
-  }, []);
+    loadInitialData();
+  }, [loadInitialData]);
 
   const generateQuiz = async () => {
     if (!selectedDoc) return;
@@ -92,9 +124,18 @@ export default function QuizPage() {
     setIsSubmitted(true);
   };
 
+  if (pageLoading) {
+    return (
+      <div className="h-screen w-full bg-[#0B1437] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full bg-[#F4F7FE] dark:bg-[#0B1437] transition-colors duration-300">
-      <Sidebar user={demoUser} />
+      {/* Dynamic User passed to Sidebar */}
+      <Sidebar user={user} />
       
       <main className="flex-1 overflow-y-auto p-8 font-sans">
         <header className="mb-10">
