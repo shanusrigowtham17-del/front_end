@@ -279,13 +279,7 @@ export default function Dashboard() {
         </div>
 
         {/* MY RESOURCES */}
-        <section className="mt-12 mb-8">
-          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mb-6 tracking-tight">My Resources</h2>
-          <div className="bg-[#111C44] rounded-[28px] p-8 shadow-sm border border-dashed border-indigo-500/50 flex flex-col items-center justify-center text-center">
-             <ResourceUploader onCourseCreated={loadDashboardData} />
-          </div>
-        </section>
-
+        
       </main>
     </div>
   );
