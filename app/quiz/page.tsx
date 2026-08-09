@@ -64,30 +64,22 @@ export default function QuizPage() {
     }
 
     // 2. Fetch all uploaded documents from the 'resources' table
-    const { data: resourceData, error } = await supabase
-      .from('resources')
-      .select('id, file_name, created_at')
-      .order('created_at', { ascending: false });
+     useEffect(() => {
+    async function fetchDocuments() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/documents`);
+        const data = await res.json();
+        if (data.documents) {
+          setDocuments(data.documents);
+          if (data.documents.length > 0) setSelectedDoc(data.documents[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load documents", err);
+      }
+    }
+    fetchDocuments();
+  }, []);
 
-    if (error) {
-      console.error("Error fetching resources:", error);
-    } else if (resourceData) {
-      // Map 'file_name' to 'filename' for the UI
-      const formattedDocs = resourceData.map(r => ({
-        id: r.id,
-        filename: r.file_name, 
-        created_at: r.created_at
-      }));
-      setDocuments(formattedDocs);
-      if (formattedDocs.length > 0) setSelectedDoc(formattedDocs[0].id);
-    }
-    
-    setPageLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadInitialData();
-  }, [loadInitialData]);
 
   const generateQuiz = async () => {
     if (!selectedDoc) return;
