@@ -31,11 +31,11 @@ export default function QuizPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string>('');
   const [numQuestions, setNumQuestions] = useState<number>(5);
-  
+
   const [quiz, setQuiz] = useState<QuizQuestion[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
-  
+
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
@@ -45,41 +45,41 @@ export default function QuizPage() {
     document.documentElement.classList.add('dark');
   }, []);
 
-  // Fetch real user and their documents from Supabase
+  // Fetch real user + profile from Supabase, then documents from the backend.
+  // This now runs once, at the top level, and always resolves pageLoading.
   const loadInitialData = useCallback(async () => {
     setPageLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session) {
-      const activeUserId = session.user.id;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
 
-      // 1. Fetch Profile Data for Sidebar
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', activeUserId)
-        .single();
-        
-      setUser({ ...profileData, email: session.user.email });
+      if (session) {
+        const activeUserId = session.user.id;
+
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', activeUserId)
+          .single();
+
+        setUser({ ...profileData, email: session.user.email });
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/documents`);
+      const data = await res.json();
+      if (data.documents) {
+        setDocuments(data.documents);
+        if (data.documents.length > 0) setSelectedDoc(data.documents[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to load initial data", err);
+    } finally {
+      setPageLoading(false);
     }
+  }, []);
 
-    // 2. Fetch all uploaded documents from the 'resources' table
-     useEffect(() => {
-    async function fetchDocuments() {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/documents`);
-        const data = await res.json();
-        if (data.documents) {
-          setDocuments(data.documents);
-          if (data.documents.length > 0) setSelectedDoc(data.documents[0].id);
-        }
-      } catch (err) {
-        console.error("Failed to load documents", err);
-      }
-    }
-    fetchDocuments();
-  }, []);
-
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
 
   const generateQuiz = async () => {
     if (!selectedDoc) return;
@@ -87,7 +87,7 @@ export default function QuizPage() {
     setQuiz(null);
     setIsSubmitted(false);
     setUserAnswers({});
-    
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/quiz`, {
         method: 'POST',
@@ -95,14 +95,14 @@ export default function QuizPage() {
         // RESTORED: Sending 'document_id' instead of 'file_id' for this specific backend
         body: JSON.stringify({ document_id: selectedDoc, num_questions: numQuestions })
       });
-      
+
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(`Server responded with ${res.status}: ${errorText}`);
       }
-      
+
       const data = await res.json();
-      
+
       if (!data.quiz) {
         throw new Error("Backend did not return a 'quiz' array in the response.");
       }
@@ -144,7 +144,7 @@ export default function QuizPage() {
   return (
     <div className="flex h-screen w-full bg-[#F4F7FE] dark:bg-[#0B1437] transition-colors duration-300">
       <Sidebar user={user} />
-      
+
       <main className="flex-1 overflow-y-auto p-8 font-sans">
         <header className="mb-10">
           <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white flex items-center gap-3">
@@ -157,11 +157,11 @@ export default function QuizPage() {
 
         {/* Configuration Card */}
         <div className="bg-white dark:bg-[#111C44] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 mb-8 flex gap-6 items-end">
-          
+
           <div className="flex-1">
             <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Select Study Material</label>
             <div className="relative">
-              <select 
+              <select
                 value={selectedDoc}
                 onChange={(e) => setSelectedDoc(e.target.value)}
                 className="w-full px-4 py-3 pr-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 transition-colors appearance-none"
@@ -176,19 +176,26 @@ export default function QuizPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="w-32">
             <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Questions</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               min="1" max="20"
               value={numQuestions}
-              onChange={(e) => setNumQuestions(parseInt(e.target.value) || 5)}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                if (Number.isNaN(val)) {
+                  setNumQuestions(5);
+                  return;
+                }
+                setNumQuestions(Math.min(20, Math.max(1, val)));
+              }}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 transition-colors"
             />
           </div>
 
-          <button 
+          <button
             onClick={generateQuiz}
             disabled={loading || !selectedDoc}
             className="bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-pink-500/30 flex items-center gap-2 min-w-[160px] justify-center"
@@ -206,12 +213,12 @@ export default function QuizPage() {
                   <span className="text-pink-500 mr-2">{qIdx + 1}.</span>
                   {q.question}
                 </h3>
-                
+
                 <div className="space-y-3">
                   {q.options.map((opt, oIdx) => {
                     const isSelected = userAnswers[qIdx] === oIdx;
                     const isCorrect = q.correct_answer_index === oIdx;
-                    
+
                     let bgClass = "bg-[#F4F7FE] dark:bg-[#0B1437] hover:bg-gray-100 dark:hover:bg-[#1A2A6C]";
                     let borderClass = "border-transparent";
 
@@ -255,8 +262,8 @@ export default function QuizPage() {
               ) : (
                 <p className="text-gray-500 font-medium">Review your answers before submitting.</p>
               )}
-              
-              <button 
+
+              <button
                 onClick={isSubmitted ? generateQuiz : submitQuiz}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-indigo-500/30"
               >
