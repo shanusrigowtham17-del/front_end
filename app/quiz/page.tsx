@@ -39,6 +39,11 @@ export default function QuizPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
 
+  // ---> THE FIX: Force dark mode on component mount <---
+  useEffect(() => {
+    document.documentElement.classList.add('dark');
+  }, []);
+
   // Fetch real user and their resources from Supabase
   const loadInitialData = useCallback(async () => {
     setPageLoading(true);
@@ -154,7 +159,7 @@ export default function QuizPage() {
             <select 
               value={selectedDoc}
               onChange={(e) => setSelectedDoc(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 transition-colors"
             >
               {documents.length === 0 ? <option>No documents uploaded yet</option> : null}
               {documents.map(doc => (
@@ -170,14 +175,14 @@ export default function QuizPage() {
               min="1" max="20"
               value={numQuestions}
               onChange={(e) => setNumQuestions(parseInt(e.target.value) || 5)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[#F4F7FE] dark:bg-[#0B1437] text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 transition-colors"
             />
           </div>
 
           <button 
             onClick={generateQuiz}
             disabled={loading || !selectedDoc}
-            className="bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-pink-500/30 flex items-center gap-2"
+            className="bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-pink-500/30 flex items-center justify-center gap-2 min-w-[160px]"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Generate Now'}
           </button>
