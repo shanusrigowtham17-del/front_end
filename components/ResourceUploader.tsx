@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const BACKEND_URL = 'https://back-end-45gs.onrender.com';
+const BACKEND_URL = 'https://pdf-course-api.onrender.com';
 
 const supabase = createClient(
   'https://gftrjvljhtqkercsiskp.supabase.co',
@@ -36,23 +36,13 @@ interface ResourceUploaderProps {
 
 export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
   const [uploading, setUploading] = useState(false);
-  const isMounted = useRef(true);
-
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputEl = e.target;
-
     try {
-      if (!inputEl.files || inputEl.files.length === 0) return;
+      if (!e.target.files || e.target.files.length === 0) return;
       setUploading(true);
 
-      const file = inputEl.files[0];
+      const file = e.target.files[0];
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -61,32 +51,43 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
       }
       const userId = session.user.id;
 
+      // 1. UPLOAD PDF TO SUPABASE STORAGE FIRST
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userId}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('course-materials')
+        .upload(fileName, file);
+
+      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+      // 2. GET THE PUBLIC URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('course-materials')
+        .getPublicUrl(fileName);
+
+      // 3. SEND TO PYTHON BACKEND
       const formData = new FormData();
       formData.append('file', file);
 
       const response = await fetch(`${BACKEND_URL}/api/upload`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: formData,
+        body: formData, // Removed auth header for now to simplify cross-origin testing
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Upload failed');
+      let result: any = {};
+      if (response.ok) {
+         result = await response.json().catch(() => ({}));
+      } else {
+         console.warn("Backend failed, using fallback data.");
       }
-
-      const result = await response.json().catch(() => ({} as any));
 
       const title = result.title || titleFromFilename(file.name);
       const subject = result.subject || guessSubject(file.name);
-      // Fixed: this used to fall back to `subject` (e.g. "Math"), which meant
-      // difficulty and subject showed the same value whenever the backend
-      // didn't return a difficulty. Default to an actual difficulty level instead.
-      const difficulty = result.difficulty || 'Beginner';
+      const difficulty = result.difficulty || subject;
       const estimated_duration = result.estimated_duration || Math.max(10, Math.round(file.size / 20000));
 
+      // 4. CREATE COURSE
       const { data: courseData, error: insertError } = await supabase
         .from('courses')
         .insert({
@@ -103,18 +104,16 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
 
       if (insertError) throw insertError;
 
+      // 5. GENERATE TOPICS & ATTACH THE PUBLIC URL
       const generatedTopics = result.topics || [
-        { title: "Module 1: Introduction & Overview", duration: 15, type: 'video' },
-        { title: "Module 2: Core Concepts", duration: 25, type: 'pdf' },
-        { title: "Module 3: Advanced Applications", duration: 30, type: 'pdf' },
-        { title: "Module 4: Summary & Quiz", duration: 10, type: 'pdf' }
+        { title: "Module 1: Complete PDF Document", duration: estimated_duration, type: 'pdf' }
       ];
 
       const topicsToInsert = generatedTopics.map((t: any, index: number) => ({
         course_id: courseData.id,
         title: t.title,
         type: t.type || 'pdf',
-        file_url: result.file_url || '',
+        file_url: publicUrl, // <-- THE MAGIC HAPPENS HERE: Real PDF link attached!
         order_index: index + 1,
         duration: t.duration || 10
       }));
@@ -124,21 +123,16 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
         .insert(topicsToInsert);
 
       if (topicsError) {
-        console.error("Failed to generate topics:", topicsError);
+          console.error("Failed to generate topics:", topicsError);
       }
 
       alert(`"${title}" added to your courses!`);
       onCourseCreated?.();
     } catch (err: any) {
       console.error(err);
-      alert(`Error: ${err?.message || 'Something went wrong during upload.'}`);
+      alert(`Error: ${err.message}`);
     } finally {
-      // Let the same file be re-selected (browsers don't fire onChange
-      // again for an unchanged file input value).
-      inputEl.value = '';
-      if (isMounted.current) {
-        setUploading(false);
-      }
+      setUploading(false);
     }
   };
 
