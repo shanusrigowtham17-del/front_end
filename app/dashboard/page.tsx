@@ -1,236 +1,395 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronLeft, FileText, PlayCircle } from 'lucide-react';
+import { Sun, Moon, Flame, Clock, Zap, Trophy, Play } from 'lucide-react';
+import { Sidebar } from '@/components/Sidebar';
+import { ResourceUploader } from '@/components/ResourceUploader';
 
 const supabase = createClient(
   'https://gftrjvljhtqkercsiskp.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
 );
 
-interface Course {
-  id: string;
-  title: string;
-}
-
-interface Topic {
-  id: string;
-  course_id: string;
-  title: string;
-  type: 'pdf' | 'video';
-  duration: number;
-  file_url: string;
-  order_index: number;
-  completed?: boolean;
-}
-
-export default function CourseDetail() {
-  const params = useParams<{ id: string }>();
+export default function Dashboard() {
   const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [activeCourses, setActiveCourses] = useState<any[]>([]);
+  const [greeting, setGreeting] = useState('Good morning');
+  const [currentDate, setCurrentDate] = useState('');
 
-  const [course, setCourse] = useState<Course | null>(null);
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [activeTopic, setActiveTopic] = useState<Topic | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [marking, setMarking] = useState(false);
+  const loadDashboardData = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
 
-  // Next.js can give string | string[] for a dynamic segment; normalize it.
-  const courseId = Array.isArray(params.id) ? params.id[0] : params.id;
+    if (!session) {
+      router.push('/login');
+      return;
+    }
+
+    const activeUserId = session.user.id;
+
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', activeUserId)
+      .single();
+
+    setUser(profileData);
+
+    // Courses generated from uploaded PDFs
+    const { data: courses } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('user_id', activeUserId)
+      .order('created_at', { ascending: false })
+      .limit(4);
+
+    setActiveCourses(courses || []);
+
+    // XP earned today
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const { data: todaysCourses } = await supabase
+      .from('courses')
+      .select('xp_earned')
+      .eq('user_id', activeUserId)
+      .gte('created_at', startOfToday.toISOString());
+
+    const xpToday = (todaysCourses || []).reduce((sum, c) => sum + (c.xp_earned || 0), 0);
+
+    // Study hours
+    const { data: allCourses } = await supabase
+      .from('courses')
+      .select('estimated_duration')
+      .eq('user_id', activeUserId);
+
+    const studyHours = Math.round(
+      ((allCourses || []).reduce((sum, c) => sum + (c.estimated_duration || 0), 0) / 60) * 10
+    ) / 10;
+
+    // Global rank
+    const { data: leaderboard } = await supabase
+      .from('profiles')
+      .select('id, total_xp')
+      .order('total_xp', { ascending: false });
+
+    const globalRank = leaderboard
+      ? leaderboard.findIndex((p) => p.id === activeUserId) + 1 || leaderboard.length
+      : 1;
+
+    setAnalytics({
+      xpToday,
+      streak: profileData?.study_streak_days || 0,
+      globalRank,
+      studyHours,
+    });
+  }, [router]);
 
   useEffect(() => {
-    if (!courseId) return;
+    const now = new Date();
+    const hour = now.getHours();
+    if (hour < 12) setGreeting('Good morning');
+    else if (hour < 18) setGreeting('Good afternoon');
+    else setGreeting('Good evening');
 
-    let cancelled = false;
+    setCurrentDate(now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }));
 
-    async function loadCourseDetails() {
-      setLoading(true);
-      setError(null);
+    document.documentElement.classList.add('dark');
 
-      const { data: courseData, error: courseError } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('id', courseId)
-        .single();
+    loadDashboardData();
 
-      if (cancelled) return;
-
-      if (courseError || !courseData) {
-        setError('Could not load this course.');
-        setLoading(false);
-        return;
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        router.push('/login');
       }
-      setCourse(courseData);
-
-      const { data: topicsData, error: topicsError } = await supabase
-        .from('topics')
-        .select('*')
-        .eq('course_id', courseId)
-        .order('order_index', { ascending: true });
-
-      if (cancelled) return;
-
-      if (topicsError) {
-        setError('Could not load the topics for this course.');
-        setLoading(false);
-        return;
-      }
-
-      setTopics(topicsData ?? []);
-      setActiveTopic(topicsData && topicsData.length > 0 ? topicsData[0] : null);
-      setLoading(false);
-    }
-
-    loadCourseDetails();
+    });
 
     return () => {
-      cancelled = true;
+      authListener.subscription.unsubscribe();
     };
-  }, [courseId]);
+  }, [router, loadDashboardData]);
 
-  async function handleMarkComplete() {
-    if (!activeTopic || marking) return;
-    setMarking(true);
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    document.documentElement.classList.toggle('dark');
+  };
 
-    const { error: updateError } = await supabase
-      .from('topics')
-      .update({ completed: true })
-      .eq('id', activeTopic.id);
-
-    if (!updateError) {
-      setTopics((prev) =>
-        prev.map((t) => (t.id === activeTopic.id ? { ...t, completed: true } : t))
-      );
-      setActiveTopic((prev) => (prev ? { ...prev, completed: true } : prev));
-    }
-    setMarking(false);
-  }
-
-  // FIXED: Added dark background and centered text
-  if (loading) {
-    return (
-      <div className="flex h-screen w-full bg-[#0B1437] items-center justify-center text-white font-bold">
-        Loading course...
-      </div>
-    );
-  }
-
-  // FIXED: Added dark background and proper flex layout
-  if (error || !course) {
-    return (
-      <div className="flex flex-col h-screen w-full bg-[#0B1437] items-center justify-center text-white p-8">
-        <p className="mb-4 text-red-400 font-bold">{error ?? 'Course not found.'}</p>
-        <button
-          onClick={() => router.push('/dashboard')}
-          className="text-sm font-bold text-gray-400 hover:text-white flex items-center"
-        >
-          <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
-        </button>
-      </div>
-    );
-  }
+  if (!user || !analytics) return (
+    <div className="h-screen w-full bg-[#0B1437] flex items-center justify-center font-bold text-slate-400">
+      Loading Dashboard...
+    </div>
+  );
 
   return (
-    <div className="flex h-screen w-full bg-[#0B1437] text-white">
-      {/* LEFT SIDEBAR: Topic List */}
-      <aside className="w-80 bg-[#111C44] border-r border-gray-800 flex flex-col">
-        <div className="p-6 border-b border-gray-800">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="flex items-center text-sm font-bold text-gray-400 hover:text-white mb-4"
-          >
-            <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
-          </button>
-          <h2 className="text-xl font-extrabold line-clamp-2">{course.title}</h2>
+    <div className={`flex h-screen w-full bg-[#F4F7FE] dark:bg-[#0B1437] transition-colors duration-300 ${theme}`}>
+
+      <Sidebar user={user} />
+
+      <main className="flex-1 overflow-y-auto p-8 font-sans">
+
+        {/* HEADER */}
+        <header className="flex justify-between items-start mb-8">
+          <div>
+            <p className="text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-[0.2em] mb-2">
+              {currentDate}
+            </p>
+            <h1 className="text-[32px] font-extrabold text-slate-900 dark:text-white flex items-center gap-2 leading-tight">
+              {greeting}, {user.full_name?.split(' ')[0] || 'Student'}! <span className="text-3xl">👋</span>
+            </h1>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mt-2">
+              You're ranked <span className="text-indigo-500 font-bold">#{analytics.globalRank} globally</span> — push for top 3 today!
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center bg-white dark:bg-[#111C44] px-4 py-2.5 rounded-full shadow-sm border border-gray-100 dark:border-gray-800">
+              <Flame className="text-orange-500 w-5 h-5 mr-2 fill-orange-500" />
+              <span className="font-extrabold text-slate-800 dark:text-white">{analytics.streak}</span>
+              <span className="text-[10px] font-bold text-gray-500 ml-1.5 uppercase tracking-wider">Day Streak</span>
+            </div>
+            <button onClick={toggleTheme} className="flex items-center bg-white dark:bg-[#111C44] px-4 py-2.5 rounded-full shadow-sm border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-[#1A2A6C] transition">
+              {theme === 'light' ? <Moon className="w-4 h-4 mr-2" /> : <Sun className="w-4 h-4 mr-2 text-white" />}
+              <span className="text-sm font-bold text-slate-800 dark:text-white">{theme === 'light' ? 'Dark' : 'Light'}</span>
+            </button>
+          </div>
+        </header>
+
+        {/* TOP STAT CARDS */}
+        <div className="grid grid-cols-4 gap-6 mb-10">
+          <AnalyticsCard
+            title="XP Earned Today"
+            value={analytics.xpToday}
+            suffix="XP"
+            icon={<Zap className="w-5 h-5 text-indigo-400 fill-indigo-400" />}
+            bg="bg-[#1A2352]"
+            cardBg="bg-gradient-to-br from-[#1E2756] to-[#111C44]"
+            valueColor="text-indigo-400"
+          />
+          <AnalyticsCard
+            title="Study Streak"
+            value={analytics.streak}
+            suffix="days"
+            icon={<Flame className="w-5 h-5 text-orange-400 fill-orange-400" />}
+            bg="bg-[#2A2342]"
+            cardBg="bg-gradient-to-br from-[#2D2447] to-[#111C44]"
+            valueColor="text-orange-400"
+          />
+          <AnalyticsCard
+            title="Global Rank"
+            value={`#${analytics.globalRank}`}
+            icon={<Trophy className="w-5 h-5 text-pink-400" />}
+            bg="bg-[#311C47]"
+            cardBg="bg-[#111C44]"
+            valueColor="text-pink-400"
+          />
+          <AnalyticsCard
+            title="Study Hours"
+            value={analytics.studyHours}
+            suffix="h"
+            icon={<Clock className="w-5 h-5 text-emerald-400" />}
+            bg="bg-[#162D44]"
+            cardBg="bg-[#111C44]"
+            valueColor="text-emerald-400"
+          />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {topics.length === 0 ? (
-            <p className="text-sm text-gray-500 p-4">No topics yet for this course.</p>
-          ) : (
-            topics.map((topic, idx) => (
-              <button
-                key={topic.id}
-                onClick={() => setActiveTopic(topic)}
-                className={`w-full text-left p-4 rounded-2xl flex items-center gap-3 transition-colors ${
-                  activeTopic?.id === topic.id
-                    ? 'bg-indigo-500/20 border border-indigo-500/50'
-                    : 'hover:bg-[#1A2352] border border-transparent'
-                }`}
-              >
-                <div className="w-8 h-8 rounded-full bg-[#0B1437] flex items-center justify-center font-bold text-xs">
-                  {idx + 1}
-                </div>
-                <div>
-                  <p
-                    className={`font-bold text-sm ${
-                      activeTopic?.id === topic.id ? 'text-indigo-400' : 'text-gray-300'
-                    }`}
-                  >
-                    {topic.title}
-                    {topic.completed && (
-                      <span className="ml-2 text-[10px] text-emerald-400">✓</span>
-                    )}
-                  </p>
-                  <p className="text-[10px] text-gray-500 flex items-center gap-1 mt-1">
-                    {topic.type === 'pdf' ? (
-                      <FileText className="w-3 h-3" />
-                    ) : (
-                      <PlayCircle className="w-3 h-3" />
-                    )}
-                    {topic.duration} mins
-                  </p>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      </aside>
+        {/* MAIN LAYOUT GRID */}
+        <div className="grid grid-cols-3 gap-6">
 
-      {/* MAIN CONTENT: PDF / Video Viewer */}
-      <main className="flex-1 flex flex-col bg-[#0B1437] p-8">
-        {activeTopic ? (
-          <div className="bg-[#111C44] flex-1 rounded-[28px] border border-gray-800 flex flex-col overflow-hidden shadow-lg">
-            <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-              <h3 className="text-2xl font-extrabold">{activeTopic.title}</h3>
-              <button
-                onClick={handleMarkComplete}
-                disabled={marking || activeTopic.completed}
-                className="bg-indigo-600 px-6 py-2 rounded-full font-bold text-sm hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {activeTopic.completed ? 'Completed' : marking ? 'Saving...' : 'Mark as Complete'}
+          {/* ACTIVE COURSES */}
+          <div className="col-span-2">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Active Courses</h2>
+              <button className="text-indigo-400 font-bold bg-[#1A2352] px-4 py-1.5 rounded-full text-xs hover:bg-[#232F6A] transition">
+                View All &rarr;
               </button>
             </div>
-            <div className="flex-1 p-6">
-              {!activeTopic.file_url ? (
-                <div className="w-full h-full rounded-xl bg-[#0B1437] flex items-center justify-center text-gray-500">
-                  No content available for this topic.
+
+            <div className="grid grid-cols-2 gap-6">
+              {activeCourses.length > 0 ? activeCourses.map(course => (
+                <DynamicCourseCard key={course.id} course={course} />
+              )) : (
+                <div className="col-span-2 text-center py-10 text-gray-500 font-medium bg-[#111C44] rounded-[28px] border border-gray-800">
+                  No courses generated yet. Upload a PDF in My Resources!
                 </div>
-              ) : activeTopic.type === 'video' ? (
-                <video
-                  key={activeTopic.id}
-                  src={activeTopic.file_url}
-                  controls
-                  className="w-full h-full rounded-xl bg-black"
-                />
-              ) : (
-                <iframe
-                  key={activeTopic.id}
-                  src={`${activeTopic.file_url}#toolbar=0`}
-                  className="w-full h-full rounded-xl bg-white"
-                  title={activeTopic.title}
-                />
               )}
             </div>
           </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-500 font-medium">
-            Select a topic to start learning.
+
+          {/* RIGHT SIDE WIDGETS */}
+          <div className="col-span-1 space-y-6 mt-12">
+
+            <div className="bg-[#111C44] rounded-[28px] p-6 shadow-sm border border-gray-800">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-base font-extrabold text-white">Study Streak</h3>
+                <div className="bg-[#2A2342] px-3 py-1 rounded-full flex items-center gap-1.5">
+                  <Flame className="w-3 h-3 text-orange-400 fill-orange-400" />
+                  <span className="text-xs font-bold text-orange-400">{analytics.streak}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-7 gap-y-3 gap-x-2 mb-4">
+                {[...Array(14)].map((_, i) => (
+                  <div key={i} className={`h-2.5 rounded-sm ${i < analytics.streak ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'bg-[#1E293B]'}`} />
+                ))}
+              </div>
+
+              <div className="flex items-center gap-4 text-[10px] font-bold text-gray-400 mt-4">
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-sm bg-emerald-400"></div> Studied</div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-sm bg-[#1E293B]"></div> Missed</div>
+              </div>
+            </div>
+
+            {/* XP Breakdown */}
+            <div className="bg-[#111C44] rounded-[28px] p-6 shadow-sm border border-gray-800">
+              <h3 className="text-base font-extrabold text-white mb-6">XP Breakdown</h3>
+
+              <div className="space-y-5">
+                {(() => {
+                  const total = activeCourses.reduce((s, c) => s + (c.xp_earned || 0), 0) || 1;
+                  const bySubject: Record<string, number> = {};
+                  activeCourses.forEach(c => {
+                    const key = c.subject || c.difficulty || 'General';
+                    bySubject[key] = (bySubject[key] || 0) + (c.xp_earned || 0);
+                  });
+                  const entries = Object.entries(bySubject);
+                  const colors = ['bg-indigo-500', 'bg-pink-500', 'bg-orange-400', 'bg-emerald-400'];
+                  return entries.length > 0 ? entries.map(([label, xp], i) => (
+                    <XPProgressBar
+                      key={label}
+                      label={label}
+                      xp={`${xp} XP`}
+                      percentage={Math.round((xp / total) * 100)}
+                      color={colors[i % colors.length]}
+                    />
+                  )) : (
+                    <p className="text-xs text-gray-500">Upload a PDF to start earning XP.</p>
+                  );
+                })()}
+              </div>
+            </div>
+
           </div>
-        )}
+        </div>
+
+        {/* MY RESOURCES */}
+        <section className="mt-12 mb-8">
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mb-6 tracking-tight">My Resources</h2>
+          <div className="bg-[#111C44] rounded-[28px] p-8 shadow-sm border border-dashed border-indigo-500/50 flex flex-col items-center justify-center text-center">
+            <ResourceUploader onCourseCreated={loadDashboardData} />
+          </div>
+        </section>
+
       </main>
+    </div>
+  );
+}
+
+// --- SUB-COMPONENTS ---
+
+function AnalyticsCard({ title, value, suffix, icon, bg, cardBg, valueColor = "text-white" }: { title: string, value: string | number, suffix?: string, icon: React.ReactNode, bg: string, cardBg: string, valueColor?: string }) {
+  return (
+    <div className={`${cardBg} p-6 rounded-[28px] shadow-sm border border-gray-800 flex flex-col justify-between h-[140px]`}>
+      <div className="flex justify-between items-start">
+        <p className="text-xs font-bold text-gray-400">{title}</p>
+        <div className={`p-2.5 rounded-xl ${bg}`}>
+          {icon}
+        </div>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <h3 className={`text-[32px] font-extrabold tracking-tight leading-none ${valueColor}`}>{value}</h3>
+        {suffix && <span className="text-lg font-bold text-gray-400">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+// UPDATED WITH ROUTING TO THE COURSE DETAIL PAGE
+function DynamicCourseCard({ course }: { course: any }) {
+  const router = useRouter();
+
+  const getColors = (subject: string) => {
+    const s = subject?.toLowerCase() || '';
+    if (s.includes('math')) return { text: 'text-indigo-400', bg: 'bg-indigo-500/10', stroke: 'stroke-indigo-500' };
+    if (s.includes('physic')) return { text: 'text-pink-400', bg: 'bg-pink-500/10', stroke: 'stroke-pink-500' };
+    if (s.includes('histor')) return { text: 'text-amber-400', bg: 'bg-amber-500/10', stroke: 'stroke-amber-400' };
+    if (s.includes('english') || s.includes('lit')) return { text: 'text-emerald-400', bg: 'bg-emerald-500/10', stroke: 'stroke-emerald-400' };
+    if (s.includes('chem')) return { text: 'text-cyan-400', bg: 'bg-cyan-500/10', stroke: 'stroke-cyan-400' };
+    if (s.includes('bio')) return { text: 'text-lime-400', bg: 'bg-lime-500/10', stroke: 'stroke-lime-400' };
+    return { text: 'text-purple-400', bg: 'bg-purple-500/10', stroke: 'stroke-purple-500' };
+  };
+
+  const colors = getColors(course.subject || course.difficulty || course.title);
+  const radius = 24;
+  const strokeDasharray = 2 * Math.PI * radius;
+  const strokeDashoffset = strokeDasharray - ((course.progress_percentage || 0) / 100) * strokeDasharray;
+
+  return (
+    <div 
+      onClick={() => router.push(`/courses/${course.id}`)}
+      className="bg-[#111C44] p-6 rounded-[28px] shadow-sm border border-gray-800 flex flex-col justify-between h-[230px] cursor-pointer hover:border-indigo-500/50 hover:shadow-indigo-500/10 transition-all group"
+    >
+      <div className="flex justify-between items-start">
+        <div className="space-y-3">
+          <span className={`text-[9px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-md ${colors.bg} ${colors.text}`}>
+            {course.subject || course.difficulty || 'General'}
+          </span>
+          <h4 className="font-extrabold text-[19px] text-white tracking-tight leading-tight line-clamp-2 max-w-[150px] group-hover:text-indigo-400 transition-colors">
+            {course.title}
+          </h4>
+        </div>
+
+        <div className="relative w-16 h-16 flex items-center justify-center">
+          <svg className="w-full h-full transform -rotate-90">
+            <circle cx="32" cy="32" r={radius} className="stroke-[#1E293B]" strokeWidth="5" fill="transparent" />
+            <circle
+              cx="32" cy="32" r={radius}
+              className={`${colors.stroke} transition-all duration-1000`}
+              strokeWidth="5" fill="transparent"
+              strokeDasharray={strokeDasharray}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="absolute text-[13px] font-black text-white">
+            {course.progress_percentage || 0}%
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-auto">
+        <div className="flex justify-between text-[11px] font-bold text-gray-500 mb-3 px-1">
+          <span>{course.estimated_duration} mins total</span>
+          <span>{course.progress_percentage < 100 ? 'In Progress' : 'Complete'}</span>
+        </div>
+
+        <div className="bg-[#1A2352] p-3 rounded-2xl flex justify-between items-center border border-indigo-900/30 group-hover:bg-[#232F6A] transition-colors">
+          <span className="text-[11px] font-bold text-gray-300 truncate max-w-[160px] pl-2">
+            Continue Learning
+          </span>
+          <button className={`w-7 h-7 bg-[#111C44] rounded-xl flex items-center justify-center shadow-sm ${colors.text} group-hover:scale-110 transition-transform`}>
+            <Play className="w-3 h-3 fill-current ml-0.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function XPProgressBar({ label, xp, percentage, color }: { label: string, xp: string, percentage: number, color: string }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-center text-xs font-extrabold">
+        <span className="text-white">{label}</span>
+        <span className="text-indigo-400">{xp}</span>
+      </div>
+      <div className="w-full h-1.5 bg-[#1E293B] rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }} />
+      </div>
     </div>
   );
 }
