@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronLeft, FileText, PlayCircle } from 'lucide-react';
+import { ChevronLeft, FileText, PlayCircle, Send, Bot, User } from 'lucide-react';
 
 const supabase = createClient(
   'https://gftrjvljhtqkercsiskp.supabase.co',
@@ -26,6 +26,11 @@ interface Topic {
   completed?: boolean;
 }
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export default function CourseDetail() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -37,11 +42,27 @@ export default function CourseDetail() {
   const [error, setError] = useState<string | null>(null);
   const [marking, setMarking] = useState(false);
 
-  // Next.js can give string | string[] for a dynamic segment; normalize it.
+  // --- Chatbot State ---
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { role: 'assistant', content: 'Hi! I am your AI tutor. Ask me anything about this document.' }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   const courseId = Array.isArray(params.id) ? params.id[0] : params.id;
 
+  // Auto-scroll chat to bottom
   useEffect(() => {
-    if (!courseId) return;
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  useEffect(() => {
+    if (!courseId) {
+      setError("Course ID is missing from the URL. Check your folder structure!");
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
 
@@ -108,7 +129,42 @@ export default function CourseDetail() {
     setMarking(false);
   }
 
-  // FIXED: Added dark background and centered text
+  // --- Chatbot Function ---
+  async function handleSendMessage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMessage: ChatMessage = { role: 'user', content: chatInput };
+    const newHistory = [...chatMessages, userMessage];
+    
+    setChatMessages(newHistory);
+    setChatInput('');
+    setIsTyping(true);
+
+    try {
+      // NOTE: Ensure the endpoint path (e.g., /chat or /ask) matches your Python API
+      const response = await fetch('https://pdf-course-api.onrender.com/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Sending the new message + previous history context
+        body: JSON.stringify({ 
+          message: userMessage.content,
+          history: newHistory 
+        }),
+      });
+
+      if (!response.ok) throw new Error('API Response Error');
+      
+      const data = await response.json();
+      // Adjust 'data.reply' to match whatever JSON key your Python API returns
+      setChatMessages([...newHistory, { role: 'assistant', content: data.reply || data.answer || data.response || "I couldn't generate a response." }]);
+    } catch (err) {
+      setChatMessages([...newHistory, { role: 'assistant', content: "⚠️ Sorry, I couldn't connect to the AI server." }]);
+    } finally {
+      setIsTyping(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen w-full bg-[#0B1437] items-center justify-center text-white font-bold">
@@ -117,7 +173,6 @@ export default function CourseDetail() {
     );
   }
 
-  // FIXED: Added dark background and proper flex layout
   if (error || !course) {
     return (
       <div className="flex flex-col h-screen w-full bg-[#0B1437] items-center justify-center text-white p-8">
@@ -133,54 +188,44 @@ export default function CourseDetail() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-[#0B1437] text-white">
-      {/* LEFT SIDEBAR: Topic List */}
-      <aside className="w-80 bg-[#111C44] border-r border-gray-800 flex flex-col">
-        <div className="p-6 border-b border-gray-800">
+    <div className="flex h-screen w-full bg-[#0B1437] text-white overflow-hidden">
+      
+      {/* 1. LEFT SIDEBAR: Topic List */}
+      <aside className="w-72 flex-shrink-0 bg-[#111C44] border-r border-gray-800 flex flex-col z-10 shadow-xl">
+        <div className="p-5 border-b border-gray-800">
           <button
             onClick={() => router.push('/dashboard')}
-            className="flex items-center text-sm font-bold text-gray-400 hover:text-white mb-4"
+            className="flex items-center text-xs font-bold text-gray-400 hover:text-white mb-4 transition-colors"
           >
-            <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
+            <ChevronLeft className="w-3 h-3 mr-1" /> Back to Dashboard
           </button>
-          <h2 className="text-xl font-extrabold line-clamp-2">{course.title}</h2>
+          <h2 className="text-lg font-extrabold line-clamp-2 leading-tight">{course.title}</h2>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
           {topics.length === 0 ? (
-            <p className="text-sm text-gray-500 p-4">No topics yet for this course.</p>
+            <p className="text-xs text-gray-500 p-4 text-center">No topics generated.</p>
           ) : (
             topics.map((topic, idx) => (
               <button
                 key={topic.id}
                 onClick={() => setActiveTopic(topic)}
-                className={`w-full text-left p-4 rounded-2xl flex items-center gap-3 transition-colors ${
+                className={`w-full text-left p-3 rounded-xl flex items-center gap-3 transition-all ${
                   activeTopic?.id === topic.id
-                    ? 'bg-indigo-500/20 border border-indigo-500/50'
+                    ? 'bg-indigo-500/15 border border-indigo-500/50 shadow-sm'
                     : 'hover:bg-[#1A2352] border border-transparent'
                 }`}
               >
-                <div className="w-8 h-8 rounded-full bg-[#0B1437] flex items-center justify-center font-bold text-xs">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] flex-shrink-0 ${activeTopic?.id === topic.id ? 'bg-indigo-500 text-white' : 'bg-[#0B1437] text-gray-400'}`}>
                   {idx + 1}
                 </div>
-                <div>
-                  <p
-                    className={`font-bold text-sm ${
-                      activeTopic?.id === topic.id ? 'text-indigo-400' : 'text-gray-300'
-                    }`}
-                  >
+                <div className="overflow-hidden">
+                  <p className={`font-bold text-xs truncate ${activeTopic?.id === topic.id ? 'text-indigo-300' : 'text-gray-300'}`}>
                     {topic.title}
-                    {topic.completed && (
-                      <span className="ml-2 text-[10px] text-emerald-400">✓</span>
-                    )}
                   </p>
-                  <p className="text-[10px] text-gray-500 flex items-center gap-1 mt-1">
-                    {topic.type === 'pdf' ? (
-                      <FileText className="w-3 h-3" />
-                    ) : (
-                      <PlayCircle className="w-3 h-3" />
-                    )}
-                    {topic.duration} mins
+                  <p className="text-[9px] text-gray-500 flex items-center gap-1 mt-0.5">
+                    {topic.type === 'pdf' ? <FileText className="w-2.5 h-2.5" /> : <PlayCircle className="w-2.5 h-2.5" />}
+                    {topic.duration} mins {topic.completed && <span className="text-emerald-400 ml-1">✓</span>}
                   </p>
                 </div>
               </button>
@@ -189,37 +234,33 @@ export default function CourseDetail() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT: PDF / Video Viewer */}
-      <main className="flex-1 flex flex-col bg-[#0B1437] p-8">
+      {/* 2. MAIN CONTENT: Document / Video Viewer */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#0B1437] p-6">
         {activeTopic ? (
-          <div className="bg-[#111C44] flex-1 rounded-[28px] border border-gray-800 flex flex-col overflow-hidden shadow-lg">
-            <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-              <h3 className="text-2xl font-extrabold">{activeTopic.title}</h3>
+          <div className="bg-[#111C44] flex-1 rounded-[24px] border border-gray-800 flex flex-col overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-[#15204c]">
+              <h3 className="text-lg font-extrabold truncate pr-4">{activeTopic.title}</h3>
               <button
                 onClick={handleMarkComplete}
                 disabled={marking || activeTopic.completed}
-                className="bg-indigo-600 px-6 py-2 rounded-full font-bold text-sm hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-shrink-0 bg-indigo-600 px-5 py-2 rounded-full font-bold text-xs hover:bg-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
               >
-                {activeTopic.completed ? 'Completed' : marking ? 'Saving...' : 'Mark as Complete'}
+                {activeTopic.completed ? 'Completed ✓' : marking ? 'Saving...' : 'Mark as Complete'}
               </button>
             </div>
-            <div className="flex-1 p-6">
+            <div className="flex-1 bg-[#090E27]">
               {!activeTopic.file_url ? (
-                <div className="w-full h-full rounded-xl bg-[#0B1437] flex items-center justify-center text-gray-500">
-                  No content available for this topic.
+                <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 space-y-2">
+                  <FileText className="w-8 h-8 opacity-20" />
+                  <p className="text-sm font-medium">No document available for this module.</p>
                 </div>
               ) : activeTopic.type === 'video' ? (
-                <video
-                  key={activeTopic.id}
-                  src={activeTopic.file_url}
-                  controls
-                  className="w-full h-full rounded-xl bg-black"
-                />
+                <video key={activeTopic.id} src={activeTopic.file_url} controls className="w-full h-full object-contain bg-black" />
               ) : (
                 <iframe
                   key={activeTopic.id}
-                  src={`${activeTopic.file_url}#toolbar=0`}
-                  className="w-full h-full rounded-xl bg-white"
+                  src={`${activeTopic.file_url}#toolbar=0&navpanes=0`}
+                  className="w-full h-full border-none bg-white"
                   title={activeTopic.title}
                 />
               )}
@@ -227,10 +268,71 @@ export default function CourseDetail() {
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500 font-medium">
-            Select a topic to start learning.
+            Select a topic from the sidebar to start learning.
           </div>
         )}
       </main>
+
+      {/* 3. RIGHT SIDEBAR: AI Chatbot */}
+      <aside className="w-[340px] flex-shrink-0 bg-[#111C44] border-l border-gray-800 flex flex-col z-10 shadow-xl">
+        <div className="p-5 border-b border-gray-800 flex items-center gap-2 bg-[#15204c]">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+          <h3 className="font-extrabold text-sm">AI Study Tutor</h3>
+        </div>
+
+        {/* Chat History View */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#0B1437]/50">
+          {chatMessages.map((msg, i) => (
+            <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${msg.role === 'user' ? 'bg-indigo-500' : 'bg-pink-500'}`}>
+                {msg.role === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
+              </div>
+              <div className={`p-3 rounded-2xl text-sm leading-relaxed max-w-[80%] ${
+                msg.role === 'user' 
+                  ? 'bg-indigo-600 text-white rounded-tr-none' 
+                  : 'bg-[#1E2756] text-gray-200 border border-indigo-500/20 rounded-tl-none'
+              }`}>
+                {msg.content}
+              </div>
+            </div>
+          ))}
+          {isTyping && (
+            <div className="flex gap-3 flex-row">
+              <div className="w-7 h-7 rounded-full bg-pink-500 flex items-center justify-center flex-shrink-0 mt-1">
+                <Bot className="w-4 h-4 text-white" />
+              </div>
+              <div className="p-4 rounded-2xl bg-[#1E2756] rounded-tl-none flex items-center gap-1.5 border border-indigo-500/20">
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Chat Input Field */}
+        <div className="p-4 border-t border-gray-800 bg-[#111C44]">
+          <form onSubmit={handleSendMessage} className="relative flex items-center">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask a question..."
+              disabled={isTyping}
+              className="w-full bg-[#0B1437] text-white text-sm rounded-full pl-4 pr-12 py-3 border border-gray-700 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={!chatInput.trim() || isTyping}
+              className="absolute right-2 p-2 bg-indigo-600 rounded-full text-white hover:bg-indigo-500 transition disabled:opacity-50 disabled:hover:bg-indigo-600"
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </form>
+        </div>
+      </aside>
+
     </div>
   );
 }
