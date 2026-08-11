@@ -142,23 +142,25 @@ export default function CourseDetail() {
     setIsTyping(true);
 
     try {
-      // FIXED 1: The endpoint path now matches your Python API exactly
       const response = await fetch('https://pdf-course-api.onrender.com/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // FIXED 2: The payload key is now "question" instead of "message"
         body: JSON.stringify({ 
           question: userMessage.content
         }),
       });
 
-      if (!response.ok) throw new Error('API Response Error');
+      // Grab the exact error message from your Python backend
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Server Error ${response.status}`);
+      }
       
       const data = await response.json();
-      // FIXED 3: Using data.response to match your FastAPI return dictionary
       setChatMessages([...newHistory, { role: 'assistant', content: data.response || "I couldn't generate a response." }]);
-    } catch (err) {
-      setChatMessages([...newHistory, { role: 'assistant', content: "⚠️ Sorry, I couldn't connect to the AI server." }]);
+    } catch (err: any) {
+      // Show the actual error in the chat bubble!
+      setChatMessages([...newHistory, { role: 'assistant', content: `⚠️ ${err.message}` }]);
     } finally {
       setIsTyping(false);
     }
