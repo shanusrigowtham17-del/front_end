@@ -36,7 +36,11 @@ interface ResourceUploaderProps {
   onCourseCreated?: () => void;
 }
 
-const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
+  // STATE DECLARATION - This is what was missing from the scope!
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (!e.target.files || e.target.files.length === 0) return;
       setUploading(true);
@@ -92,7 +96,6 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (insertError) throw insertError;
 
       // 3. Generate Topics for the Byju's View
-      // If your backend returns topics, we use them. Otherwise, we create smart fallbacks.
       const generatedTopics = result.topics || [
         { title: "Module 1: Introduction & Overview", duration: 15, type: 'video' },
         { title: "Module 2: Core Concepts", duration: 25, type: 'pdf' },
@@ -100,71 +103,22 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         { title: "Module 4: Summary & Quiz", duration: 10, type: 'pdf' }
       ];
 
-      // Map the topics to match our Supabase table structure
       const topicsToInsert = generatedTopics.map((t: any, index: number) => ({
-        course_id: courseData.id, // Link to the course we just created!
+        course_id: courseData.id,
         title: t.title,
         type: t.type || 'pdf',
-        file_url: result.file_url || '', // The URL to display in the iframe
+        file_url: result.file_url || '', 
         order_index: index + 1,
         duration: t.duration || 10
       }));
 
-      // Insert the topics into the database
       const { error: topicsError } = await supabase
         .from('topics')
         .insert(topicsToInsert);
 
       if (topicsError) {
           console.error("Failed to generate topics:", topicsError);
-          // We don't throw here so the user still sees the course was created
       }
-
-      alert(`"${title}" added to your courses!`);
-      onCourseCreated?.();
-    } catch (err: any) {
-      console.error(err);
-      alert(`Error: ${err.message}`);
-    } finally {
-      setUploading(false);
-    }
-  };
-      // Backend only extracts text (and, if it can, subject/difficulty metadata).
-      // It does NOT need to know about Supabase.
-      const response = await fetch(`${BACKEND_URL}/api/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Upload failed');
-      }
-
-      // Backend may or may not return useful metadata — handle both cases.
-      const result = await response.json().catch(() => ({} as any));
-
-      const title = result.title || titleFromFilename(file.name);
-      const subject = result.subject || guessSubject(file.name);
-      const difficulty = result.difficulty || subject;
-      const estimated_duration = result.estimated_duration || Math.max(10, Math.round(file.size / 20000)); // rough page-count proxy
-
-      // This is the step that was missing: actually create the course
-      // that the dashboard's "Active Courses" section reads.
-      const { error: insertError } = await supabase.from('courses').insert({
-        user_id: userId,
-        title,
-        subject,
-        difficulty,
-        estimated_duration,
-        progress_percentage: 0,
-        xp_earned: 0,
-      });
-
-      if (insertError) throw insertError;
 
       alert(`"${title}" added to your courses!`);
       onCourseCreated?.();
