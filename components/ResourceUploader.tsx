@@ -10,8 +10,6 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
 );
 
-// Very simple keyword guesser used ONLY as a fallback when the backend
-// response doesn't include a subject. Good enough for a demo.
 function guessSubject(filename: string): string {
   const name = filename.toLowerCase();
   if (/(math|calc|algebra|geometry)/.test(name)) return 'Math';
@@ -37,7 +35,7 @@ interface ResourceUploaderProps {
 }
 
 export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
-  // STATE DECLARATION - This is what was missing from the scope!
+  // THIS IS THE CRUCIAL LINE THAT WAS MISSING:
   const [uploading, setUploading] = useState(false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,7 +55,6 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
       const formData = new FormData();
       formData.append('file', file);
 
-      // 1. Send to backend
       const response = await fetch(`${BACKEND_URL}/api/upload`, {
         method: 'POST',
         headers: {
@@ -78,7 +75,6 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
       const difficulty = result.difficulty || subject;
       const estimated_duration = result.estimated_duration || Math.max(10, Math.round(file.size / 20000));
 
-      // 2. Create the course AND return the newly created row data (.select().single())
       const { data: courseData, error: insertError } = await supabase
         .from('courses')
         .insert({
@@ -95,7 +91,6 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
 
       if (insertError) throw insertError;
 
-      // 3. Generate Topics for the Byju's View
       const generatedTopics = result.topics || [
         { title: "Module 1: Introduction & Overview", duration: 15, type: 'video' },
         { title: "Module 2: Core Concepts", duration: 25, type: 'pdf' },
