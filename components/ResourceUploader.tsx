@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const BACKEND_URL = 'https://back-end-45gs.onrender.com';
@@ -35,15 +35,24 @@ interface ResourceUploaderProps {
 }
 
 export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
-  // THIS IS THE CRUCIAL LINE THAT WAS MISSING:
   const [uploading, setUploading] = useState(false);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputEl = e.target;
+
     try {
-      if (!e.target.files || e.target.files.length === 0) return;
+      if (!inputEl.files || inputEl.files.length === 0) return;
       setUploading(true);
 
-      const file = e.target.files[0];
+      const file = inputEl.files[0];
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -72,7 +81,10 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
 
       const title = result.title || titleFromFilename(file.name);
       const subject = result.subject || guessSubject(file.name);
-      const difficulty = result.difficulty || subject;
+      // Fixed: this used to fall back to `subject` (e.g. "Math"), which meant
+      // difficulty and subject showed the same value whenever the backend
+      // didn't return a difficulty. Default to an actual difficulty level instead.
+      const difficulty = result.difficulty || 'Beginner';
       const estimated_duration = result.estimated_duration || Math.max(10, Math.round(file.size / 20000));
 
       const { data: courseData, error: insertError } = await supabase
@@ -102,7 +114,7 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
         course_id: courseData.id,
         title: t.title,
         type: t.type || 'pdf',
-        file_url: result.file_url || '', 
+        file_url: result.file_url || '',
         order_index: index + 1,
         duration: t.duration || 10
       }));
@@ -112,16 +124,21 @@ export function ResourceUploader({ onCourseCreated }: ResourceUploaderProps) {
         .insert(topicsToInsert);
 
       if (topicsError) {
-          console.error("Failed to generate topics:", topicsError);
+        console.error("Failed to generate topics:", topicsError);
       }
 
       alert(`"${title}" added to your courses!`);
       onCourseCreated?.();
     } catch (err: any) {
       console.error(err);
-      alert(`Error: ${err.message}`);
+      alert(`Error: ${err?.message || 'Something went wrong during upload.'}`);
     } finally {
-      setUploading(false);
+      // Let the same file be re-selected (browsers don't fire onChange
+      // again for an unchanged file input value).
+      inputEl.value = '';
+      if (isMounted.current) {
+        setUploading(false);
+      }
     }
   };
 
