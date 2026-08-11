@@ -5,7 +5,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { ChevronLeft, FileText, PlayCircle } from 'lucide-react';
 
-const supabase = createClient('https://gftrjvljhtqkercsiskp.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
+const supabase = createClient(
+  'https://gftrjvljhtqkercsiskp.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdHJqdmxqaHRxa2VyY3Npc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQ4NTUsImV4cCI6MjEwMDE5MDg1NX0.hWY-QP3Ulb1uJPBhuSGCZo07tJr1aXm7GhXalX03uIs'
 );
 
 interface Course {
@@ -106,19 +108,25 @@ export default function CourseDetail() {
     setMarking(false);
   }
 
+  // FIXED: Added dark background and centered text
   if (loading) {
-    return <div className="p-8 text-white">Loading course...</div>;
+    return (
+      <div className="flex h-screen w-full bg-[#0B1437] items-center justify-center text-white font-bold">
+        Loading course...
+      </div>
+    );
   }
 
+  // FIXED: Added dark background and proper flex layout
   if (error || !course) {
     return (
-      <div className="p-8 text-white">
-        <p className="mb-4 text-red-400">{error ?? 'Course not found.'}</p>
+      <div className="flex flex-col h-screen w-full bg-[#0B1437] items-center justify-center text-white p-8">
+        <p className="mb-4 text-red-400 font-bold">{error ?? 'Course not found.'}</p>
         <button
           onClick={() => router.push('/dashboard')}
-          className="text-sm font-bold text-gray-400 hover:text-white"
+          className="text-sm font-bold text-gray-400 hover:text-white flex items-center"
         >
-          Back to Dashboard
+          <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
         </button>
       </div>
     );
